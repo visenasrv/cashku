@@ -299,7 +299,7 @@
     },
     bantuan(m) {
       const contoh = [['Catat pengeluaran', 'beli kopi 25rb'], ['Beberapa sekaligus', 'bensin 25rb, makan siang 30rb'], ['Pemasukan', 'gaji masuk bri 5jt'],
-        ['Pindah saldo', 'top up gopay 100rb dari bri'], ['Nabung (tunai → rekening)', 'nabung 500rb'], ['Atur saldo dompet', 'saldo bank sekarang 5jt'], ['Tanya', 'jajan bulan ini?'], ['Unduh laporan', 'unduh laporan bulan ini'], ['Batalkan', 'batal']];
+        ['Pindah saldo', 'top up gopay 100rb dari bri'], ['Nabung (tunai → rekening)', 'nabung 500rb'], ['Atur saldo dompet', 'saldo bank sekarang 5jt'], ['Tanya', 'jajan bulan ini?'], ['Terbesar', 'pengeluaran terbesar minggu ini'], ['Rata-rata', 'rata-rata pengeluaran per hari'], ['Unduh laporan', 'unduh laporan bulan ini'], ['Batalkan', 'batal']];
       return {
         html: '<p>' + teksAman(m.data.teks || 'Cukup ketik seperti mengobrol. Contoh:') + '</p>' +
           contoh.map((c) => '<div class="ln" style="display:flex;justify-content:space-between;gap:8px;padding:4px 0"><span class="muted small">' + c[0] + '</span><button class="link small" data-isi="' + U.esc(c[1]) + '">' + U.esc(c[1]) + '</button></div>').join('') +
@@ -396,6 +396,12 @@
         const ds = m.data.drafts;
         ds.forEach((x) => { x.id_dompet = v.id; x.tanyaDompet = false; x.dompetPilihan = null; });
         await Chat.simpanDrafts(ds, m.data.teksAsli, m.data.batch);
+        return Chat.lanjutKlar();
+      }
+      case 'dompetSemua': {
+        await tandai(m, i);
+        if (Chat.pending && Chat.pending.type === 'dompetBayar') Chat.pending = null;
+        Chat.antreKlar.unshift({ type: 'dompetBayar', ds: m.data.drafts, pilihan: null, semua: true, batch: m.data.batch, teksAsli: m.data.teksAsli });
         return Chat.lanjutKlar();
       }
       case 'saldoDompet': {
@@ -533,8 +539,21 @@
       Chat.pending = null;
       if (n && (p.type === 'harga' || p.type === 'nominal')) return p.jawab(n);
       if (p.type === 'dompetBayar' || p.type === 'saldoDompet') {
-        const ids = P.dompetDari(teks, S.ctxParser()).filter((id) => !p.pilihan || p.pilihan.indexOf(id) > -1);
-        if (ids.length === 1 && P.normal(teks).split(' ').length <= 4) return p.jawabDompet(ids[0]);
+        const semuaIds = P.dompetDari(teks, S.ctxParser());
+        const ids = semuaIds.filter((id) => !p.pilihan || p.pilihan.indexOf(id) > -1);
+        const pendek = P.normal(teks).split(' ').length <= 4;
+        if (ids.length === 1 && pendek) return p.jawabDompet(ids[0]);
+        if (p.type === 'dompetBayar' && !ids.length && semuaIds.length && pendek && !P.nominalSaja(teks)) {
+          Chat.pending = p;
+          const sd = S.saldoDompet().find((x) => x.dompet.id_dompet === semuaIds[0]);
+          return Chat.sistem(sd && sd.saldo <= 0
+            ? 'Saldo **' + sd.dompet.nama + '** ' + (sd.saldo < 0 ? '\u2212' : '') + U.rp(sd.saldo) + ', jadi tidak bisa dipakai membayar. Pilih dompet di atas, atau catat saldonya dulu.'
+            : 'Pilih salah satu dompet di atas, ya.');
+        }
+        if (ids.length > 1 && pendek && !P.nominalSaja(teks)) {
+          Chat.pending = p;
+          return Chat.sistem('**' + U.huruf1(teks.trim()) + '** bisa dari beberapa dompet. Ketuk salah satu pilihan di atas, atau ketik nama dompetnya (misalnya **rek** atau **gopay**).');
+        }
       }
       Chat.antreKlar = [];
     }
@@ -671,13 +690,24 @@
     if (k.type === 'dompetBayar') {
       const ds = k.ds, masuk = ds.every((x) => x.jenis === 'MASUK');
       const saldo = Object.fromEntries(S.saldoDompet().map((x) => [x.dompet.id_dompet, x.saldo]));
-      let opsi = S.dompetAktif().filter((x) => !k.pilihan || k.pilihan.indexOf(x.id_dompet) > -1);
-      if (!masuk && !k.pilihan) { const ada = opsi.filter((x) => (saldo[x.id_dompet] || 0) > 0); if (ada.length) opsi = ada; }  // hanya yang ada saldonya
+      const semuaOpsi = S.dompetAktif().filter((x) => !k.pilihan || k.pilihan.indexOf(x.id_dompet) > -1);
+      // Membayar hanya bisa dari dompet yang ada saldonya (uang masuk boleh ke dompet mana pun)
+      let opsi = masuk ? semuaOpsi : semuaOpsi.filter((x) => (saldo[x.id_dompet] || 0) > 0);
+      const kosongSemua = !masuk && !opsi.length;
+      if (kosongSemua) opsi = semuaOpsi;                              // tak ada yang bersaldo → tetap bisa dicatat, sambil diingatkan
       opsi.sort((a, b) => (saldo[b.id_dompet] || 0) - (saldo[a.id_dompet] || 0));
+      if (!masuk && !kosongSemua && opsi.length === 1) {
+        // Hanya satu dompet yang ada saldonya → pasti dibayar dari situ, tidak perlu bertanya
+        ds.forEach((x) => { x.id_dompet = opsi[0].id_dompet; x.tanyaDompet = false; x.dompetPilihan = null; });
+        await Chat.simpanDrafts(ds, k.teksAsli, k.batch);
+        return Chat.lanjutKlar();
+      }
       const total = ds.reduce((a, x) => a + x.nominal, 0);
       const apa = ds.length > 1 ? ds.length + ' transaksi (' + U.rp(total) + ')' : ds[0].keterangan + ' ' + U.rp(total);
+      const contoh = opsi.slice(0, 3).map((x) => '**' + (x.tipe === 'TUNAI' ? 'tunai' : x.tipe === 'REKENING' ? 'rek' : (String(x.alias || '').split(',').map((a) => a.trim()).find((a) => /^(gopay|ovo|dana|shopeepay)$/.test(a)) || 'e-wallet')) + '**');
       const m = await Chat.tambah({ kind: 'pilihan', data: {
-        teks: apa + (masuk ? ' masuk ke mana?' : ' dibayar pakai apa?'), sub: 'Atau ketik, misalnya: **tunai**, **rek**, **gopay**',
+        teks: apa + (masuk ? ' masuk ke mana?' : ' dibayar pakai apa?'),
+        sub: kosongSemua ? 'Semua dompet saldonya Rp0 di CashKu. Catat saldonya dulu, misalnya **saldo tunai sekarang 500rb**.' : 'Atau ketik, misalnya: ' + contoh.join(', '),
         drafts: ds, batch: k.batch, teksAsli: k.teksAsli,
         chips: opsi.map((x) => ({ label: (x.ikon || '') + ' ' + x.nama + ' \u00b7 ' + (saldo[x.id_dompet] < 0 ? '\u2212' : '') + U.rp(saldo[x.id_dompet] || 0), aksi: 'dompetBayar', nilai: { id: x.id_dompet } }))
       } });
@@ -759,6 +789,109 @@
 
   // ---------- Pertanyaan ----------
   function catatanKoreksi(it) { return it.perubahan && it.perubahan.length ? 'Saya baca: “' + it.teksKoreksi + '”' : ''; }
+  // ---------- Terbesar / terkecil ----------
+  const selisihHari = (a, b) => Math.round((U.parseTgl(b) - U.parseTgl(a)) / 86400000);
+  const tglSingkat = (a, b) => (a === b ? U.tglPendek(a) : U.tglPendek(a) + '–' + U.tglPendek(b)) + ' ' + b.slice(0, 4);
+  Chat.jawabEkstrem = function (it, per, orang, namaOrang, kor) {
+    const jenis = it.jenis || 'KELUAR', kata = jenis === 'MASUK' ? 'Pemasukan' : 'Pengeluaran', besar = it.arah !== 'kecil';
+    let list = S.txTerlihat({ mulai: per.mulai, sampai: per.sampai, orang, jenis });
+    if (it.kategori) list = list.filter((t) => t.id_kategori === it.kategori);
+    const namaKat = it.kategori ? ' ' + S.kat(it.kategori).nama.toLowerCase() : '';
+    const urut = (a, b) => (besar ? b - a : a - b);
+    const total = list.reduce((a, t) => a + t.nominal, 0);
+    const kosong = (judul) => Chat.tambah({ kind: 'ringkasan', data: { judul, catatan: 'Belum ada ' + kata.toLowerCase() + namaKat + ' ' + per.label.toLowerCase() + '. ' + kor } });
+    const satuHari = per.mulai === per.sampai;
+    const siapa = (t) => (S.lihatSemua() && t.id_pengguna !== S.saya.id ? ' · ' + S.orang(t.id_pengguna).nama : '');
+
+    if (it.kelompok === 'kategori') {
+      const g2 = {};
+      list.forEach((t) => { g2[t.id_kategori] = (g2[t.id_kategori] || 0) + t.nominal; });
+      const ids = Object.keys(g2).sort((a, b) => urut(g2[a], g2[b]));
+      const judul = (besar ? '🏆 Kategori ' : '🔻 Kategori ') + kata.toLowerCase() + (besar ? ' terbesar' : ' terkecil') + ' · ' + per.label + namaOrang;
+      if (!ids.length) return kosong(judul);
+      const k0 = S.kat(ids[0]);
+      return Chat.tambah({ kind: 'ringkasan', data: { judul, total: U.rp(g2[ids[0]]), kelasTotal: jenis === 'MASUK' ? 't-in' : 't-out',
+        caption: '**' + k0.ikon + ' ' + k0.nama + '** · ' + U.persen(g2[ids[0]], total) + '% dari total ' + U.rp(total),
+        baris: ids.slice(1, 6).map((id) => { const k = S.kat(id); return { l: k.ikon + ' ' + k.nama + ' · ' + U.persen(g2[id], total) + '%', v: U.rp(g2[id]) }; }),
+        catatan: kor } });
+    }
+    if (it.kelompok === 'hari') {
+      const g2 = {}, n = {};
+      list.forEach((t) => { g2[t.tanggal_transaksi] = (g2[t.tanggal_transaksi] || 0) + t.nominal; n[t.tanggal_transaksi] = (n[t.tanggal_transaksi] || 0) + 1; });
+      const hari = Object.keys(g2).sort((a, b) => urut(g2[a], g2[b]) || a.localeCompare(b));
+      const judul = (besar ? '📅 Hari paling boros · ' : '📅 Hari paling hemat · ') + per.label + namaOrang;
+      if (!hari.length) return kosong(judul);
+      const lbl = (d) => U.HARI[U.parseTgl(d).getDay()] + ', ' + U.tglPendek(d);
+      return Chat.tambah({ kind: 'ringkasan', data: { judul, total: U.rp(g2[hari[0]]), kelasTotal: 't-out',
+        caption: '**' + lbl(hari[0]) + '** · ' + n[hari[0]] + ' transaksi',
+        baris: hari.slice(1, 6).map((d) => ({ l: lbl(d) + ' · ' + n[d] + ' transaksi', v: U.rp(g2[d]) })),
+        catatan: (besar ? '' : 'Hanya menghitung hari yang ada ' + kata.toLowerCase() + 'nya. ') + kor } });
+    }
+    if (it.kelompok === 'orang') {
+      if (!S.lihatSemua()) return Chat.sistem('Kamu hanya bisa melihat data milikmu sendiri, jadi tidak bisa membandingkan antar anggota.');
+      const g2 = {};
+      list.forEach((t) => { g2[t.id_pengguna] = (g2[t.id_pengguna] || 0) + t.nominal; });
+      const ids = Object.keys(g2).sort((a, b) => urut(g2[a], g2[b]));
+      const judul = '👥 ' + kata + namaKat + ' per anggota · ' + per.label;
+      if (!ids.length) return kosong(judul);
+      return Chat.tambah({ kind: 'ringkasan', data: { judul, total: U.rp(g2[ids[0]]), kelasTotal: jenis === 'MASUK' ? 't-in' : 't-out',
+        caption: '**' + S.orang(ids[0]).nama + '** paling ' + (besar ? 'banyak' : 'sedikit') + ' · ' + U.persen(g2[ids[0]], total) + '% dari total ' + U.rp(total),
+        baris: ids.slice(1, 6).map((id) => ({ l: S.orang(id).nama + ' · ' + U.persen(g2[id], total) + '%', v: U.rp(g2[id]) })),
+        catatan: kor } });
+    }
+    // Per transaksi
+    const top = list.slice().sort((a, b) => urut(a.nominal, b.nominal) || String(b.waktu_catat).localeCompare(String(a.waktu_catat))).slice(0, 5);
+    const judul = (besar ? '🔝 ' : '🔻 ') + kata + namaKat + (besar ? ' terbesar' : ' terkecil') + ' · ' + per.label + namaOrang;
+    if (!top.length) return kosong(judul);
+    const meta = (t) => (satuHari ? '' : ' · ' + U.tglPendek(t.tanggal_transaksi)) + siapa(t);
+    const t0 = top[0];
+    return Chat.tambah({ kind: 'ringkasan', data: { judul, total: U.rp(t0.nominal), kelasTotal: jenis === 'MASUK' ? 't-in' : 't-out',
+      caption: '**' + S.ikonTx(t0) + ' ' + S.judulTx(t0) + '** · ' + S.kat(t0.id_kategori).nama + (S.fiturDompet() && t0.id_dompet ? ' · ' + S.namaDompet(t0.id_dompet) : '') + meta(t0),
+      baris: top.slice(1).map((t) => ({ l: S.ikonTx(t) + ' ' + S.judulTx(t) + meta(t), v: U.rp(t.nominal) })),
+      catatan: 'Dari ' + list.length + ' transaksi, total ' + U.rp(total) + '. ' + kor } });
+  };
+
+  // ---------- Rata-rata per hari / minggu / bulan / tahun ----------
+  const HARI_PER = { hari: 1, minggu: 7, bulan: 30.4375, tahun: 365.25 };
+  Chat.jawabRata = function (it, orang, namaOrang, kor) {
+    const jenis = it.jenis || 'KELUAR', kata = jenis === 'MASUK' ? 'pemasukan' : 'pengeluaran', sat = it.satuan || 'hari';
+    const hi = U.hariIni();
+    const semua = S.txTerlihat({ orang });
+    const awalData = semua.reduce((a, t) => (!a || t.tanggal_transaksi < a ? t.tanggal_transaksi : a), '');
+    let list = semua.filter((t) => t.jenis === jenis);
+    if (it.kategori) list = list.filter((t) => t.id_kategori === it.kategori);
+    const namaKat = it.kategori ? ' ' + S.kat(it.kategori).nama.toLowerCase() : '';
+    const judul = '📈 Rata-rata ' + kata + namaKat + ' per ' + sat + namaOrang;
+    let mulai, sampai;
+    if (it.periode) { mulai = it.periode.mulai; sampai = it.periode.sampai < hi ? it.periode.sampai : hi; }
+    else {
+      sampai = hi;
+      mulai = sat === 'hari' ? U.tambahHari(hi, -29) : sat === 'minggu' ? U.tambahHari(hi, -83) : sat === 'bulan' ? U.tambahBulan(U.awalBulan(hi), -11) : awalData || hi;
+    }
+    if (awalData && mulai < awalData) mulai = awalData;            // jangan hitung hari sebelum mulai mencatat
+    if (!awalData || mulai > sampai) return Chat.tambah({ kind: 'ringkasan', data: { judul, catatan: 'Belum ada ' + kata + ' yang tercatat' + (it.periode ? ' ' + it.periode.label.toLowerCase() : '') + '. ' + kor } });
+    const dlm = list.filter((t) => t.tanggal_transaksi >= mulai && t.tanggal_transaksi <= sampai);
+    const total = dlm.reduce((a, t) => a + t.nominal, 0);
+    const nHari = selisihHari(mulai, sampai) + 1;
+    const perHari = total / nHari;
+    const bulat = (x, k) => Math.round(x / k) * k;
+    const rata = bulat(perHari * HARI_PER[sat], 100);
+    // Pembanding: berjalan saat ini & perkiraan satuan lain
+    const kini = { hari: [hi, 'Hari ini'], minggu: [U.awalMinggu(hi), 'Minggu ini (s.d. hari ini)'], bulan: [U.awalBulan(hi), 'Bulan ini (s.d. hari ini)'], tahun: [hi.slice(0, 4) + '-01-01', 'Tahun ini (s.d. hari ini)'] }[sat];
+    const jmlKini = list.filter((t) => t.tanggal_transaksi >= kini[0] && t.tanggal_transaksi <= hi).reduce((a, t) => a + t.nominal, 0);
+    const banding = nHari > 1 && rata > 0 ? (jmlKini > rata * 1.05 ? 1 : jmlKini < rata * 0.95 ? -1 : 0) : null;
+    const baris = [{ l: kini[1], v: U.rp(jmlKini), kelas: jenis === 'KELUAR' && sat === 'hari' && banding === 1 ? 't-out' : '' }];
+    ['hari', 'minggu', 'bulan', 'tahun'].filter((x) => x !== sat).forEach((x) => baris.push({ l: '≈ per ' + x, v: U.rp(bulat(perHari * HARI_PER[x], x === 'hari' ? 100 : 1000)) }));
+    const perkiraan = nHari < HARI_PER[sat];
+    return Chat.tambah({ kind: 'ringkasan', data: { judul, total: U.rp(rata), kelasTotal: jenis === 'MASUK' ? 't-in' : 't-out',
+      caption: 'Dihitung dari **' + nHari + ' hari** (' + tglSingkat(mulai, sampai) + '), total ' + U.rp(total) + ' · ' + dlm.length + ' transaksi.',
+      baris,
+      catatan: (perkiraan ? 'Data baru ' + nHari + ' hari, jadi angka per ' + sat + ' masih perkiraan. ' : '') +
+        (sat === 'hari' && jenis === 'KELUAR' && banding !== null ? ['Hari ini masih di bawah rata-rata. ', 'Hari ini sekitar rata-rata. ', 'Hari ini di atas rata-rata. '][banding + 1] : '') +
+        (!perkiraan && nHari < 365 ? 'Angka ≈ per ' + (nHari < 30 ? 'bulan/tahun' : 'tahun') + ' masih perkiraan. ' : '') +
+        (nHari <= 3 ? 'Makin banyak hari tercatat, makin akurat rata-ratanya. ' : '') + kor } });
+  };
+
   Chat.jawabTanya = async function (it) {
     if (it.periodeError) {
       const pe = it.periodeError;
@@ -794,6 +927,8 @@
         baris: st.map((x) => { const l = S.labelAnggaran(x.a); return { l: l.ikon + ' ' + l.nama + (x.a.lingkup === 'PERORANG' ? ' (' + l.lingkup + ')' : '') + ' · ' + Math.round(x.persen) + '%', v: (x.sisa < 0 ? 'lewat ' : 'sisa ') + U.rp(x.sisa), kelas: x.level === 2 ? 't-out' : x.level === 1 ? 't-warn' : 't-in' }; }),
         catatan: kor } });
     }
+    if (it.metric === 'ekstrem') return Chat.jawabEkstrem(it, per, orang, namaOrang, kor);
+    if (it.metric === 'rata') return Chat.jawabRata(it, orang, namaOrang, kor);
     const r = S.ringkasan(f);
     if (it.metric === 'kategori' || (it.metric === 'masuk' && it.kategori)) {
       const k = S.kat(it.kategori);

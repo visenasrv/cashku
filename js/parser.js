@@ -14,7 +14,10 @@
   };
   const VOCAB = ['unduh', 'download', 'cetak', 'print', 'ekspor', 'export', 'laporan', 'rekap', 'ringkasan', 'bulan', 'minggu', 'tahun',
     'hari', 'lalu', 'kemarin', 'terakhir', 'pengeluaran', 'pemasukan', 'saldo', 'sisa', 'anggaran', 'berapa', 'total', 'batal',
-    'bantuan', 'tanggal', 'sampai', 'semua', 'saja', 'transaksi'].concat(BULAN);
+    'bantuan', 'tanggal', 'sampai', 'semua', 'saja', 'transaksi', 'rata', 'rerata', 'terbesar', 'terkecil', 'tertinggi', 'terendah',
+    'termahal', 'termurah', 'paling', 'besar', 'kecil', 'banyak', 'boros', 'hemat', 'harian', 'mingguan', 'bulanan', 'tahunan', 'setiap',
+    'tiap', 'pekan', 'sehari', 'seminggu', 'sebulan', 'setahun', 'kategori', 'siapa', 'belakangan', 'average', 'satu', 'dua', 'tiga',
+    'empat', 'lima', 'enam', 'tujuh', 'delapan', 'sembilan', 'sepuluh', 'sebelas', 'belas', 'puluh'].concat(BULAN);
   const STOP = ['beli', 'membeli', 'dibeli', 'bayar', 'bayarin', 'membayar', 'dibayar', 'buat', 'untuk', 'tadi', 'sebesar', 'seharga',
     'harga', 'rp', 'sih', 'ya', 'dong', 'nih', 'aja', 'saja', 'yang', 'barusan', 'td'];
   const KATA_MASUK_HAPUS = ['masuk', 'dapat', 'dapet', 'terima', 'diterima', 'menerima', 'cair'];
@@ -22,8 +25,12 @@
   const TIPE_KATA = {
     TUNAI: ['tunai', 'cash', 'kas', 'kes', 'kontan', 'uang tunai', 'uang cash', 'duit tunai'],
     REKENING: ['rekening', 'rek', 'bank', 'atm', 'tabungan', 'debit', 'm-banking', 'mbanking'],
-    EWALLET: ['e-wallet', 'ewallet', 'e wallet', 'dompet digital', 'dompet online', 'qris']
+    EWALLET: ['e-wallet', 'ewallet', 'e wallet', 'dompet digital', 'dompet online']
   };
+  // QRIS bisa dibayar dari rekening (m-banking) maupun e-wallet → bila tidak disebut dompetnya, ditanyakan
+  const KATA_QRIS = ['qris', 'scan qris', 'scan qr', 'qr code', 'kode qr'];
+  // Kata e-commerce: selalu berarti Belanja Online walau ada kata kategori lain ("belanja di shopee")
+  const KAT_PRIORITAS = (id, k) => id === 'KAT-ONLINE' || /^belanja online$/i.test((k && k.nama) || '');
   const SEP_KONJ = /\s+(?:dan|sama|terus|trus|lalu juga|plus|&|\+)\s+/;
 
   const escRe = (s) => s.replace(/[.*+?^${}()|[\]\\/-]/g, '\\$&');
@@ -80,7 +87,7 @@
     const dompet = [];
     ctx.dompet.forEach((d) => {
       if (d.aktif === false) return;
-      const fr = [d.nama].concat(String(d.alias || '').split(',')).map((x) => normal(x)).filter(Boolean);
+      const fr = [d.nama].concat(String(d.alias || '').split(',')).map((x) => normal(x)).filter((x) => x && KATA_QRIS.indexOf(x) < 0);
       Array.from(new Set(fr)).forEach((f) => dompet.push({ frasa: f, id: d.id_dompet, tipe: d.tipe }));
     });
     // Kata umum per jenis dompet ("kas", "rek", "bank", "dompet digital"...). Bila jenisnya punya >1 dompet → ditanyakan.
@@ -89,6 +96,8 @@
       const ids = ctx.dompet.filter((d) => d.aktif !== false && d.tipe === tp).map((d) => d.id_dompet);
       if (ids.length) TIPE_KATA[tp].forEach((f) => { if (!sudah.has(f)) ids.forEach((id) => dompet.push({ frasa: f, id, tipe: tp, umum: true })); });
     });
+    const idsQris = ctx.dompet.filter((d) => d.aktif !== false && (d.tipe === 'REKENING' || d.tipe === 'EWALLET')).map((d) => d.id_dompet);
+    KATA_QRIS.forEach((f) => { if (!sudah.has(f)) idsQris.forEach((id) => dompet.push({ frasa: f, id, tipe: 'QRIS', umum: true })); });
     const anggota = [];
     ctx.anggota.forEach((a) => {
       [a.nama, a.username].filter(Boolean).forEach((x) => anggota.push({ frasa: normal(x), id: a.id }));
@@ -197,6 +206,19 @@
     return BULAN_SINGKAT[word] || 0;
   }
 
+  // Angka dalam kata: "dua", "tiga belas", "dua puluh lima", "se-" (seminggu)
+  const ANGKA = { se: 1, satu: 1, dua: 2, tiga: 3, empat: 4, lima: 5, enam: 6, tujuh: 7, delapan: 8, sembilan: 9, sepuluh: 10, sebelas: 11 };
+  const SATUAN_RE = '(?:satu|dua|tiga|empat|lima|enam|tujuh|delapan|sembilan)';
+  const RE_BERGULIR = new RegExp('(?:^|\\s)(\\d{1,3}|' + SATUAN_RE + ' puluh(?: ' + SATUAN_RE + ')?|' + SATUAN_RE + ' belas|' + SATUAN_RE + '|sepuluh|sebelas|se)\\s*(hari|minggu|pekan|bulan|tahun)\\s*(?:ini|terakhir|belakangan|ke ?belakang)\\b');
+  function angkaKata(s) {
+    s = String(s || '').trim();
+    if (/^\d+$/.test(s)) return Number(s);
+    let m;
+    if ((m = /^(\w+) belas$/.exec(s))) return ANGKA[m[1]] < 10 ? 10 + ANGKA[m[1]] : null;
+    if ((m = /^(\w+) puluh(?: (\w+))?$/.exec(s))) return ANGKA[m[1]] < 10 ? ANGKA[m[1]] * 10 + (m[2] ? ANGKA[m[2]] || 0 : 0) : null;
+    return ANGKA[s] || null;
+  }
+
   /** Periode untuk pertanyaan & laporan. Mengembalikan {ok, mulai, sampai, label, jenis} atau {ok:false, err, pesan, saran} */
   function periode(t, hariIni) {
     const h = pd(hariIni), Y = h.getFullYear(), M = h.getMonth() + 1;
@@ -206,10 +228,20 @@
       if (r.ok && r.mulai > hariIni) return { ok: false, err: 'future', pesan: r.label + ' belum berjalan.', label: r.label, saran: saran || [] };
       return r;
     };
+    if ((m = RE_BERGULIR.exec(t))) {
+      const n = angkaKata(m[1]), sat = m[2] === 'pekan' ? 'minggu' : m[2];
+      if (n && n >= 1 && n <= 3650 && !(sat === 'bulan' && n > 1)) {
+        const hari = sat === 'hari' ? n : sat === 'minggu' ? n * 7 : sat === 'bulan' ? 30 : n * 365;
+        if (hari === 1) return { ok: true, mulai: hariIni, sampai: hariIni, label: 'Hari ini (' + tglLabel(hariIni) + ')', jenis: 'hari' };
+        const mulai = addD(hariIni, -(hari - 1));
+        const nama = sat === 'bulan' ? '30 hari terakhir' : (n === 1 ? (sat === 'minggu' ? '7 hari terakhir' : '1 tahun terakhir') : n + ' ' + sat + ' terakhir');
+        return { ok: true, mulai, sampai: hariIni, label: U_huruf1(nama) + ' (' + tglLabel(mulai).replace(mulai.slice(0, 4) === hariIni.slice(0, 4) ? / \d{4}$/ : /$^/, '') + '–' + tglLabel(hariIni) + ')', jenis: 'rentang', hari };
+      }
+    }
     if (/\bhari ini\b/.test(t)) return { ok: true, mulai: hariIni, sampai: hariIni, label: 'Hari ini (' + tglLabel(hariIni) + ')', jenis: 'hari' };
     if (/\bkemarin\b/.test(t)) { const k = addD(hariIni, -1); return { ok: true, mulai: k, sampai: k, label: 'Kemarin (' + tglLabel(k) + ')', jenis: 'hari' }; }
-    if (/\bminggu ini\b/.test(t)) { const s = senin(hariIni); return { ok: true, mulai: s, sampai: addD(s, 6), label: 'Minggu ini (' + tglLabel(s).replace(/ \d{4}$/, '') + '–' + tglLabel(addD(s, 6)) + ')', jenis: 'minggu' }; }
-    if (/\bminggu (?:lalu|kemarin)\b/.test(t)) { const s = addD(senin(hariIni), -7); return { ok: true, mulai: s, sampai: addD(s, 6), label: 'Minggu lalu (' + tglLabel(s).replace(/ \d{4}$/, '') + '–' + tglLabel(addD(s, 6)) + ')', jenis: 'minggu' }; }
+    if (/\b(?:minggu|pekan) ini\b/.test(t)) { const s = senin(hariIni); return { ok: true, mulai: s, sampai: addD(s, 6), label: 'Minggu ini (' + tglLabel(s).replace(/ \d{4}$/, '') + '–' + tglLabel(addD(s, 6)) + ')', jenis: 'minggu' }; }
+    if (/\b(?:minggu|pekan) (?:lalu|kemarin)\b/.test(t)) { const s = addD(senin(hariIni), -7); return { ok: true, mulai: s, sampai: addD(s, 6), label: 'Minggu lalu (' + tglLabel(s).replace(/ \d{4}$/, '') + '–' + tglLabel(addD(s, 6)) + ')', jenis: 'minggu' }; }
     if (/\bbulan ini\b/.test(t)) return bulanPenuh(Y, M);
     if (/\bbulan (?:lalu|kemarin)\b/.test(t)) { let y = Y, mo = M - 1; if (mo < 1) { mo = 12; y--; } return bulanPenuh(y, mo); }
     if (/\btahun ini\b/.test(t)) return { ok: true, mulai: ymd(Y, 1, 1), sampai: ymd(Y, 12, 31), label: 'Tahun ' + Y, jenis: 'tahun', tahun: Y };
@@ -451,7 +483,8 @@
     }
 
     // Kategori sesuai jenis (frasa terpanjang menang)
-    const kat = katSemua.filter((k) => k.jenis === jenis).sort((a, b) => b.len - a.len)[0];
+    const kandidat = katSemua.filter((k) => k.jenis === jenis).sort((a, b) => b.len - a.len);
+    const kat = kandidat.find((k) => KAT_PRIORITAS(k.target, idx.katAktif[k.target])) || kandidat[0];
     d.id_kategori = kat ? kat.target : (jenis === 'MASUK' ? ctx.kategoriDefaultMasuk : ctx.kategoriDefaultKeluar);
     d.kategoriDikenal = !!kat;
     d.frasaKategori = kat ? kat.frasa : '';
@@ -461,6 +494,11 @@
       let pilihD = dompetHits[0] || null;
       const pref = dompetHits.find((hh) => /\b(pakai|pake|via|lewat|dari|ke|di|dengan|pakai saldo)$/.test(kataSebelum(tanpaNominal, hh.index)));
       if (pref) pilihD = pref;
+      if (pilihD && idsFrasa(idx, pilihD.frasa).length > 1) {
+        const amb = idsFrasa(idx, pilihD.frasa);
+        const tunggal = dompetHits.find((hh) => { const x = idsFrasa(idx, hh.frasa); return x.length === 1 && amb.indexOf(x[0]) > -1; });
+        if (tunggal) pilihD = tunggal;
+      }
       d.dompetDisebut = !!pilihD;
       if (pilihD) {
         const ids = idsFrasa(idx, pilihD.frasa);
@@ -574,12 +612,39 @@
     if (/^(laporan|rekap laporan|lihat laporan)$/.test(t)) return { type: 'laporan_ambigu' };
 
     // ---- Pertanyaan ----
-    const kataTanya = /\b(berapa|total|rekap|ringkasan|habis|sisa|saldo|pengeluaran|pemasukan|pendapatan|anggaran)\b|\?/.test(t);
+    const reRata = /\b(rata(?:\s*-\s*rata|\s+rata|2)?|rerata|average)\b/;
+    const reBesar = /\b(terbesar|tertinggi|termahal|terboros|paling (?:besar|banyak|tinggi|mahal|boros|gede))\b/;
+    const reKecil = /\b(terkecil|terendah|termurah|terhemat|paling (?:kecil|sedikit|rendah|murah|hemat))\b/;
+    const kataTanya = /\b(berapa|total|rekap|ringkasan|habis|sisa|saldo|pengeluaran|pemasukan|pendapatan|anggaran)\b|\?/.test(t) ||
+      (/\brata\b/.test(t) ? /\brata(?:\s*-\s*|\s+)rata\b/.test(t) : reRata.test(t)) || reBesar.test(t) || reKecil.test(t);
     const katHit = cariSemua(t, idx.kat).filter((k) => !/^(pemasukan|uang masuk|belanja)$/.test(k.frasa) || !/\b(pengeluaran|pemasukan)\b/.test(t)).sort((a, b) => b.len - a.len)[0];
     if (!nominalKuat && (kataTanya || (adaPeriode && (katHit || /\b(transaksi|catatan|riwayat)\b/.test(t) || per.jenis === 'hari')))) {
       const q = { type: 'tanya', perubahan: kor.perubahan, teksKoreksi: t };
       if (per.ok) q.periode = per; else if (adaPeriode) q.periodeError = per;
       const ang = cariAnggota(t, idx, ctx); if (ang) q.orang = ang.id;
+      const jenisQ = /\b(pemasukan|pendapatan|penghasilan|uang masuk)\b/.test(t) ? 'MASUK' : 'KELUAR';
+      const katSpesifik = katHit && !/^(belanja|pengeluaran|pemasukan|uang masuk)$/.test(katHit.frasa) ? katHit : null;   // "belanja" di pertanyaan = pengeluaran umum
+      if (!/\bsaldo\b/.test(t) && reRata.test(t) && (!/\brata\b/.test(t) || /\brata(?:\s*-\s*|\s+)rata\b/.test(t))) {
+        // Rata-rata: "rata-rata pengeluaran per hari (bulan ini)", "rata2 belanja mingguan"
+        q.metric = 'rata'; q.jenis = jenisQ;
+        const sm = /\b(?:per|setiap|tiap(?:\s*-?\s*tiap|2)?|se)\s*(hari|minggu|pekan|bulan|tahun)\b(?!\s*(?:ini|terakhir|belakangan|lalu|kemarin|ke ?belakang))/.exec(t)
+          || (() => { const x = /\b(harian|mingguan|bulanan|tahunan)\b/.exec(t); return x && !(katHit && katHit.frasa.indexOf(x[1]) > -1) ? x : null; })();
+        const SAT = { harian: 'hari', mingguan: 'minggu', bulanan: 'bulan', tahunan: 'tahun', pekan: 'minggu' };
+        q.satuan = sm ? (SAT[sm[1]] || sm[1]) : 'hari';
+        const per2 = periode(sm ? t.slice(0, sm.index) + ' ' + t.slice(sm.index + sm[0].length) : t, ctx.hariIni);
+        delete q.periode; delete q.periodeError;
+        if (per2.ok) q.periode = per2; else if (per2.err === 'invalid' || per2.err === 'future') q.periodeError = per2;
+        if (katSpesifik && katSpesifik.jenis === jenisQ) q.kategori = katSpesifik.target;
+        return q;
+      }
+      if (!/\bsaldo\b/.test(t) && (reBesar.test(t) || reKecil.test(t))) {
+        // Terbesar/terkecil: "pengeluaran terbesar 3 hari ini", "kategori paling boros bulan ini", "hari paling boros minggu ini"
+        q.metric = 'ekstrem'; q.jenis = jenisQ; q.arah = reBesar.test(t) ? 'besar' : 'kecil';
+        q.kelompok = /\bkategori\b/.test(t) ? 'kategori' : /\bsiapa\b/.test(t) ? 'orang'
+          : /\b(hari apa|hari yang|hari paling|hari ter(?!akhir)\w+|tanggal berapa|tanggal (?:yang|paling))\b/.test(t) ? 'hari' : 'transaksi';
+        if (katSpesifik && katSpesifik.jenis === jenisQ && q.kelompok !== 'kategori') q.kategori = katSpesifik.target;
+        return q;
+      }
       if (/\bsaldo\b/.test(t)) {
         q.metric = 'saldo';
         const dq = cariDompetQ(t, idx); if (dq && dq.id) q.dompet = dq.id; else if (dq) q.dompetAmbigu = dq.ambigu;

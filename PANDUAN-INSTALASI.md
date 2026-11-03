@@ -103,6 +103,11 @@ Claude akan memandu tahap ini satu per satu di percakapan.
 | `saldo saya sekarang 2jt` (tanpa nama dompet) | CashKu menanyakan dompet yang dimaksud |
 | `kemarin parkir 2rb` | Dicatat tanggal kemarin |
 | `jajan bulan ini?` · `saldo` · `sisa anggaran` | Jawaban ringkas di chat |
+| `pengeluaran terbesar hari ini` · `… dua hari ini` · `… 3 hari terakhir` · `… seminggu terakhir` · `… bulan ini` · `… tahun ini` | 5 pengeluaran terbesar pada periode itu |
+| `kategori pengeluaran terbesar bulan ini` · `hari paling boros minggu ini` · `siapa yang paling boros bulan ini` | Peringkat per kategori / per hari / per anggota |
+| `rata-rata pengeluaran per hari` · `… per minggu` · `… per bulan` · `… per tahun` · `rata-rata jajan per hari bulan ini` | Rata-rata + perbandingan dengan hari/minggu/bulan berjalan |
+| `checkout shopee 150rb` · `beli baju di lazada 120rb` · `ongkir 15rb` | Kategori **Belanja Online** |
+| `bayar qris 25rb` | CashKu bertanya: dari Rekening atau E-Wallet (yang ada saldonya; bila hanya satu, langsung dipakai) |
 | `unduh laporan bulan ini` · `laporan maret 2026` · `laporan tahun 2025` | Kartu laporan + tombol Unduh PDF |
 | `batal` | Membatalkan pesan transaksi terakhir |
 | `bantuan` | Daftar contoh |
@@ -110,7 +115,7 @@ Claude akan memandu tahap ini satu per satu di percakapan.
 
 **Penyesuaian saldo** tidak dihitung sebagai pemasukan atau pengeluaran. Yang dicatat hanya selisihnya (misalnya saldo di aplikasi Rp4.200.000, Anda ketik `saldo bank sekarang 5jt` → tercatat penyesuaian +Rp800.000), sehingga laporan bulanan tetap rapi.
 
-**Dompet default "Tanya dulu"** — di **Akun Saya → Dompet default** pilih *Tanya dulu setiap transaksi*. Setiap mencatat, CashKu menanyakan dibayar pakai apa dan hanya menawarkan dompet yang ada saldonya. Anda boleh mengetuk pilihan atau mengetik `tunai`, `rek`, `gopay`. Bila chat sudah menyebut dompetnya (`bayar parkir 5rb pakai tunai`), CashKu tidak bertanya lagi. Kata `rek` selalu berarti Rekening.
+**Dompet default "Tanya dulu"** — di **Akun Saya → Dompet default** pilih *Tanya dulu setiap transaksi*. Setiap mencatat, CashKu menanyakan dibayar pakai apa dan **hanya menawarkan dompet yang ada saldonya** (dompet kosong tidak bisa dipakai membayar). Bila hanya satu dompet yang ada saldonya, CashKu langsung memakainya tanpa bertanya. Bila semua dompet Rp0, semua tetap ditawarkan dengan pengingat untuk mencatat saldo dulu. Anda boleh mengetuk pilihan atau mengetik `tunai`, `rek`, `gopay`. Bila chat sudah menyebut dompetnya (`bayar parkir 5rb pakai tunai`), CashKu tidak bertanya lagi. Kata `rek` selalu berarti Rekening.
 
 **Warna & latar chat** — Admin mengganti warna di **Pengaturan → Tampilan**; warna langsung berubah di layar (termasuk gelembung chat Anda) sambil disimpan ke server, dan anggota lain mendapatkannya saat sinkron. **Latar chat** bisa diganti dengan gambar dari galeri oleh setiap anggota. Gambar diperkecil dan **hanya disimpan di HP itu**, tidak dikirim ke server atau Google Sheets. Di HP lain atur sendiri. Pilih *Pakai bawaan* untuk mengembalikannya.
 
@@ -118,6 +123,8 @@ Claude akan memandu tahap ini satu per satu di percakapan.
 
 ## Memperbarui aplikasi
 
+> **Pembaruan 1.0.5 (pertanyaan terbesar & rata-rata, Belanja Online, QRIS)** mengubah **server dan tampilan**: tempel ulang `Kode.gs` lalu buat *Versi baru*. Kategori **Belanja Online** dan kata kuncinya otomatis ditambahkan ke database lama saat aplikasi pertama kali sinkron (atau jalankan fungsi `migrasiData` sekali dari editor). Lalu unggah ulang tampilan.
+>
 > **Pembaruan 1.0.2 (penyesuaian saldo, Tanya dulu, warna instan, latar chat)** mengubah **keduanya**: tempel ulang `Kode.gs` yang baru lalu buat *Versi baru* (langkah di bawah; **tidak perlu** menjalankan `setupAppEnvironment` lagi), kemudian unggah ulang tampilan ke GitHub.
 
 **Server (Kode.gs)** — setelah mengubah kode: **Terapkan → Kelola deployment → ✏️ Edit → Versi: Versi baru → Terapkan**.

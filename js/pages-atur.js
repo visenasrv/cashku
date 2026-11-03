@@ -439,7 +439,7 @@
     show(el) {
       const s = S.saya;
       el.querySelector('[data-body]').innerHTML = '<div class="card"><label class="field"><span class="lbl">Nama tampilan</span><input class="input" data-nama maxlength="30" value="' + U.esc(s.nama) + '"></label>' +
-        (S.fiturDompet() ? '<span class="lbl" style="margin-top:16px">Dompet default</span><select class="select" data-dompet>' + opsiDefault(s.id_dompet_default) + '</select><p class="help">Dipakai bila chat tidak menyebut dompet. Pilih <b>Tanya dulu</b> agar CashKu menanyakan dompet yang dipakai (hanya dompet yang ada saldonya).</p>' : '') +
+        (S.fiturDompet() ? '<span class="lbl" style="margin-top:16px">Dompet default</span><select class="select" data-dompet>' + opsiDefault(s.id_dompet_default) + '</select><p class="help">Dipakai bila chat tidak menyebut dompet. Pilih <b>Tanya dulu</b> agar CashKu menanyakan dompet yang dipakai. Hanya dompet yang ada saldonya yang ditawarkan; bila hanya satu yang ada saldonya, langsung dipakai.</p>' : '') +
         '<button class="btn block" style="margin-top:16px" data-simpan-profil>Simpan profil</button></div>' +
         '<div class="sec">Ganti password</div><div class="card"><label class="field"><span class="lbl">Password lama</span><input class="input" type="password" data-lama autocomplete="current-password"></label>' +
         '<label class="field"><span class="lbl">Password baru</span><input class="input" type="password" data-baru autocomplete="new-password" minlength="6"></label><p class="help">Minimal 6 karakter.</p>' +
