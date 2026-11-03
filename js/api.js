@@ -56,14 +56,34 @@
       if (res.success || !res.retryable) break;
     }
     if (!res.success && res.data && res.data.code === 'AUTH' && g.App && g.App.sesiBerakhir) g.App.sesiBerakhir();
+    if (!res.success && res.network && res.message === 'Koneksi terputus.') res.message = await diagnosa();
     return res;
+  }
+
+  /** Jelaskan kenapa server tidak bisa dihubungi (pengganti pesan umum "Koneksi terputus") */
+  let _diag = null;
+  function diagnosa() {
+    if (navigator.onLine === false) return Promise.resolve('Tidak ada koneksi internet.');
+    if (!urlTerisi()) return Promise.resolve('Alamat server di js/config.js belum diisi. Tempel URL /exec dari Apps Script.');
+    if (_diag) return _diag;
+    _diag = fetch(GAS_URL() + '?cek=' + Date.now(), { cache: 'no-store', redirect: 'follow' })
+      .then((r) => r.json()).then((j) => (j && j.success
+        ? 'Server terhubung, tetapi permintaan ini gagal diproses. Coba lagi sebentar lagi.'
+        : 'Server membalas tidak wajar. Periksa URL /exec di js/config.js.'))
+      .catch(() => 'Server tidak bisa dihubungi. Periksa URL /exec di js/config.js dan pastikan akses deployment Apps Script "Siapa saja".')
+      .finally(() => setTimeout(() => { _diag = null; }, 3000));
+    return _diag;
   }
 
   function pemanasan() {
     try { fetch(GAS_URL() + '?ping=' + Date.now(), { mode: 'no-cors', cache: 'no-store' }).catch(() => {}); } catch (e) {}
   }
-  function urlTerisi() { return /^https:\/\/script\.google\.com\/macros\/s\/[^/]{20,}\/exec/.test(GAS_URL()) || /^http:\/\/(localhost|127\.0\.0\.1)/.test(GAS_URL()); }
+  function urlTerisi() {
+    const u = String(GAS_URL() || '');
+    if (/TEMPEL|ID_DEPLOYMENT/i.test(u)) return false;
+    return /^https:\/\/script\.google\.com\/(a\/[^/]+\/)?macros\/s\/[^/]{20,}\/exec/.test(u) || /^http:\/\/(localhost|127\.0\.0\.1)/.test(u);
+  }
 
-  g.API = { api, pemanasan, urlTerisi, Perf };
+  g.API = { api, pemanasan, urlTerisi, diagnosa, Perf };
   g.Perf = Perf;
 })(window);

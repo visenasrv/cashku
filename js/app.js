@@ -87,6 +87,7 @@
       if (ruang && ruang.quota && ruang.usage / ruang.quota > 0.9) UI.Toast.show('Penyimpanan HP hampir penuh', 'warn', 'Segera online agar data terkirim.');
       if (S.outbox.size > 500) UI.Toast.show(S.outbox.size + ' perubahan belum terkirim', 'warn', 'Segera sambungkan ke internet.');
       if (g.DB.pakaiMemori()) UI.Toast.show('Mode penyimpanan sementara', 'warn', 'Browser ini tidak mengizinkan penyimpanan offline (mode privat?).');
+      if (!g.API.urlTerisi()) UI.Toast.show('Alamat server belum diisi', 'error', 'Buka js/config.js lalu tempel URL /exec dari Apps Script. Sampai itu diisi, catatan hanya tersimpan di HP ini.', 15000);
     },
 
     /** Token kedaluwarsa/dicabut: data di HP tetap aman, minta masuk lagi dengan akun yang sama */
