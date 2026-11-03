@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+  <title>CashKu</title>
+  <meta name="description" content="CashKu — catat keuangan keluarga semudah chatting.">
+  <meta name="theme-color" content="#008069">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" type="image/png" href="icons/favicon-64.png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="CashKu">
+  <link rel="preconnect" href="https://script.google.com">
+  <link rel="preconnect" href="https://script.googleusercontent.com">
+  <link rel="preload" href="fonts/pjs-400.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="fonts/pjs-600.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="css/style.css">
+  <script>
+    // Terapkan tema sebelum tampilan muncul (mencegah kedip putih di mode gelap)
+    (function () {
+      try {
+        var m = localStorage.getItem('cashku:tema') || 'OTOMATIS';
+        var gelap = m === 'GELAP' || (m === 'OTOMATIS' && matchMedia('(prefers-color-scheme: dark)').matches);
+        document.documentElement.dataset.theme = gelap ? 'dark' : 'light';
+      } catch (e) {}
+    })();
+  </script>
+  <style>
+    .boot { min-height: 100dvh; display: grid; place-items: center; }
+    .boot img { width: 72px; height: 72px; border-radius: 20px; animation: bootp 1.2s ease-in-out infinite; }
+    @keyframes bootp { 50% { opacity: .55; transform: scale(.96); } }
+  </style>
+</head>
+<body>
+  <div id="app"><div class="boot"><img src="icons/icon-192.png" alt="CashKu"></div></div>
+  <noscript><p style="padding:24px;font-family:sans-serif">CashKu membutuhkan JavaScript. Aktifkan JavaScript di browser Anda.</p></noscript>
+
+  <script src="js/config.js" defer></script>
+  <script src="js/icons.js" defer></script>
+  <script src="js/util.js" defer></script>
+  <script src="js/db.js" defer></script>
+  <script src="js/api.js" defer></script>
+  <script src="js/state.js" defer></script>
+  <script src="js/parser.js" defer></script>
+  <script src="js/sync.js" defer></script>
+  <script src="js/ui.js" defer></script>
+  <script src="js/charts.js" defer></script>
+  <script src="js/chat.js" defer></script>
+  <script src="js/pages-utama.js" defer></script>
+  <script src="js/laporan.js" defer></script>
+  <script src="js/pages-atur.js" defer></script>
+  <script src="js/app.js" defer></script>
+</body>
+</html>
