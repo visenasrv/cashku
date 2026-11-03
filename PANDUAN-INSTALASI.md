@@ -19,7 +19,6 @@ Data keluarga tersimpan di **Google Sheets milik Anda sendiri**. GitHub hanya me
 4. Di bagian paling atas kode, ubah bagian `SETUP`:
    ```javascript
    const SETUP = {
-     NAMA_KELUARGA:  'Keluarga Dani',
      ADMIN_NAMA:     'Ayah',
      ADMIN_USERNAME: 'admin',
      ADMIN_PASSWORD: 'ganti-password-ini'   // minimal 6 karakter
@@ -84,7 +83,7 @@ Claude akan memandu tahap ini satu per satu di percakapan.
 ## Tahap 4 — Pertama kali dipakai
 
 1. Buka situs → masuk dengan username & password Admin dari `SETUP`.
-2. **Pengaturan → Kelola dompet**: isi **saldo awal** Tunai, Rekening, E-Wallet (ganti nama sesuai milik keluarga, misalnya "BRI Ayah", dan alias seperti `bri, brimo`).
+2. **Pengaturan → Kelola dompet**: ganti nama sesuai milik keluarga (misalnya "BRI Ayah") dan alias seperti `bri, brimo`. Saldo awal bisa diisi di sini, atau cukup ketik di chat: `saldo bank sekarang 5jt`, `uang tunai saya 300rb`.
 3. **Pengaturan → Kelola Anggota**: tambahkan Bunda (Dewasa), anak-anak (Anak; pilih izin lihat).
 4. **Pengaturan → Anggaran**: buat batas belanja, misalnya Jajan keluarga Rp1.000.000/bulan.
 5. **Ganti password Admin** di **Akun Saya** (password di `SETUP` ada di kode).
@@ -98,15 +97,28 @@ Claude akan memandu tahap ini satu per satu di percakapan.
 | `bensin 25rb, makan siang 30rb` | 2 transaksi sekaligus |
 | `gaji masuk bri 10jt` | Pemasukan ke rekening |
 | `top up gopay 100rb dari bri` | Pindah saldo rekening → e-wallet |
+| `nabung 500rb` | Uang tunai masuk ke rekening (tercatat sebagai Nabung) |
+| `saldo saya dibank sekarang 5.000.000` · `rekening sekarang 5jt` · `di bank ada 5jt` | Saldo Rekening disesuaikan menjadi Rp5.000.000 |
+| `uang tunai saya sekarang 1,5jt` · `kas tinggal 300rb` · `tunai sisa 200rb` | Saldo Tunai disesuaikan |
+| `saldo saya sekarang 2jt` (tanpa nama dompet) | CashKu menanyakan dompet yang dimaksud |
 | `kemarin parkir 2rb` | Dicatat tanggal kemarin |
 | `jajan bulan ini?` · `saldo` · `sisa anggaran` | Jawaban ringkas di chat |
 | `unduh laporan bulan ini` · `laporan maret 2026` · `laporan tahun 2025` | Kartu laporan + tombol Unduh PDF |
 | `batal` | Membatalkan pesan transaksi terakhir |
 | `bantuan` | Daftar contoh |
+| **Tekan lama** sebuah pesan → *Hapus pesan* | Pesan dihapus dan transaksinya ikut dibatalkan |
+
+**Penyesuaian saldo** tidak dihitung sebagai pemasukan atau pengeluaran. Yang dicatat hanya selisihnya (misalnya saldo di aplikasi Rp4.200.000, Anda ketik `saldo bank sekarang 5jt` → tercatat penyesuaian +Rp800.000), sehingga laporan bulanan tetap rapi.
+
+**Dompet default "Tanya dulu"** — di **Akun Saya → Dompet default** pilih *Tanya dulu setiap transaksi*. Setiap mencatat, CashKu menanyakan dibayar pakai apa dan hanya menawarkan dompet yang ada saldonya. Anda boleh mengetuk pilihan atau mengetik `tunai`, `rek`, `gopay`. Bila chat sudah menyebut dompetnya (`bayar parkir 5rb pakai tunai`), CashKu tidak bertanya lagi. Kata `rek` selalu berarti Rekening.
+
+**Warna & latar chat** — Admin mengganti warna di **Pengaturan → Tampilan**; warna langsung berubah di layar (termasuk gelembung chat Anda) sambil disimpan ke server, dan anggota lain mendapatkannya saat sinkron. **Latar chat** bisa diganti dengan gambar dari galeri oleh setiap anggota. Gambar diperkecil dan **hanya disimpan di HP itu**, tidak dikirim ke server atau Google Sheets. Di HP lain atur sendiri. Pilih *Pakai bawaan* untuk mengembalikannya.
 
 ---
 
 ## Memperbarui aplikasi
+
+> **Pembaruan 1.0.2 (penyesuaian saldo, Tanya dulu, warna instan, latar chat)** mengubah **keduanya**: tempel ulang `Kode.gs` yang baru lalu buat *Versi baru* (langkah di bawah; **tidak perlu** menjalankan `setupAppEnvironment` lagi), kemudian unggah ulang tampilan ke GitHub.
 
 **Server (Kode.gs)** — setelah mengubah kode: **Terapkan → Kelola deployment → ✏️ Edit → Versi: Versi baru → Terapkan**.
 ⚠️ Jangan memilih *Deployment baru*, karena URL `/exec` akan berubah dan aplikasi terputus.

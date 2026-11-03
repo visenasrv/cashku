@@ -5,6 +5,10 @@
   const SWATCH = ['#25D366', '#0EA5E9', '#6366F1', '#E11D48', '#F59E0B', '#0F766E'];
   const PERAN = { ADMIN: ['Admin', 'b-green'], DEWASA: ['Dewasa', 'b-blue'], ANAK: ['Anak', 'b-amber'] };
 
+  const labelDefault = (id) => (id === 'TANYA' ? 'Tanya dulu' : S.namaDompet(id));
+  const opsiDefault = (pilih) => '<option value="TANYA"' + (pilih === 'TANYA' ? ' selected' : '') + '>\u2753 Tanya dulu setiap transaksi</option>' +
+    S.dompetAktif().map((d) => '<option value="' + U.esc(d.id_dompet) + '"' + (d.id_dompet === pilih ? ' selected' : '') + '>' + U.esc(d.ikon || '') + ' ' + U.esc(d.nama) + '</option>').join('');
+
   async function panggilOnline(action, data, btn) {
     if (!UI.perluOnline()) return null;
     if (btn) UI.tombolSibuk(btn, true);
@@ -25,7 +29,8 @@
       el.addEventListener('click', async (e) => {
         const go = e.target.closest('[data-go]'); if (go) { UI.Router.go(go.dataset.go); return; }
         const sw = e.target.closest('[data-warna]');
-        if (sw && S.isAdmin()) { await simpanWarna(sw.dataset.warna); return; }
+        if (sw && S.isAdmin()) { simpanWarna(sw.dataset.warna, el); return; }
+        if (e.target.closest('[data-latar-hapus]')) { await g.Chat.Latar.hapus(); render(el); UI.Toast.show('Latar chat dikembalikan', 'success'); return; }
         const m = e.target.closest('[data-tema] button[data-v]');
         if (m) { UI.Tema.setMode(m.dataset.v); render(el); return; }
         if (e.target.closest('[data-pasang]')) { g.App.pasang(); return; }
@@ -33,7 +38,14 @@
         if (e.target.closest('[data-sinkron]')) { await g.Sync.sekarang({ paksaMaster: true }); render(el); UI.Toast.show(g.Sync.status === 'ok' ? 'Tersinkron' : 'Belum tersinkron', g.Sync.status === 'ok' ? 'success' : 'warn', g.Sync.pesanError || ''); }
       });
       el.addEventListener('change', async (e) => {
-        if (e.target.dataset.custom !== undefined) { await simpanWarna(e.target.value.toUpperCase()); return; }
+        if (e.target.dataset.custom !== undefined) { simpanWarna(e.target.value.toUpperCase(), el); return; }
+        if (e.target.dataset.latarFile !== undefined && e.target.files && e.target.files[0]) {
+          const lbl = el.querySelector('[data-latar-pilih]');
+          if (lbl) lbl.classList.add('sibuk');
+          try { await g.Chat.Latar.pasang(e.target.files[0]); UI.Toast.show('Latar chat diganti', 'success', 'Hanya tersimpan di HP ini.'); }
+          catch (er) { UI.Toast.show('Gambar tidak bisa dipakai', 'error', er.message); }
+          e.target.value = ''; render(el); return;
+        }
         if (e.target.dataset.fitur !== undefined) {
           const v = e.target.checked ? 'ON' : 'OFF';
           const res = await panggilOnline('pengaturanSimpan', { fitur_dompet: v });
@@ -46,12 +58,30 @@
     show(el) { render(el); },
     segarkan(el) { render(el); }
   });
-  async function simpanWarna(w) {
-    const res = await panggilOnline('pengaturanSimpan', { warna_utama: w });
-    if (res && res.success) { UI.Tema.terapkan(); UI.Router.segarkan(); UI.Toast.show('Warna aplikasi diganti', 'success'); }
+  // Ganti warna: langsung diterapkan di layar (instan), disimpan ke server di latar; dikembalikan bila gagal
+  let urutWarna = 0, statusWarna = '';
+  async function simpanWarna(w, el) {
+    if (!S.isAdmin() || !UI.perluOnline()) return;
+    const id = ++urutWarna;
+    if (!S._warnaSementara) S._warnaLama = String(S.master.pengaturan.warna_utama || '#25D366');
+    S._warnaSementara = w;
+    statusWarna = 'simpan';
+    UI.Tema.terapkan(); render(el);
+    const res = await g.API.api('pengaturanSimpan', { warna_utama: w });
+    if (id !== urutWarna) return;                     // sudah ada pilihan warna yang lebih baru
+    if (res.success) {
+      S.master.pengaturan.warna_utama = w; await S.simpanMaster();
+      statusWarna = 'ok'; g.Sync.jadwal(1500);
+    } else {
+      S.master.pengaturan.warna_utama = S._warnaLama; statusWarna = 'gagal';
+      UI.Toast.show('Warna belum tersimpan', 'error', res.message || 'Coba lagi saat koneksi stabil.');
+    }
+    S._warnaSementara = null;
+    UI.Tema.terapkan(); render(el);
+    setTimeout(() => { if (id === urutWarna && statusWarna === 'ok') { statusWarna = ''; if (!el.hidden) render(el); } }, 2500);
   }
   function render(el) {
-    const s = S.saya, warna = String(S.master.pengaturan.warna_utama || '#25D366').toUpperCase();
+    const s = S.saya, warna = String(S._warnaSementara || S.master.pengaturan.warna_utama || '#25D366').toUpperCase();
     const usulan = S.master.usulan.filter((u) => u.status === 'MENUNGGU').length;
     const st = g.Sync.status, antre = Array.from(S.outbox.values()).filter((o) => o.type === 'tx.put').length;
     const row = (go, ikon, judul, kanan, extra) => '<button class="list-row" ' + go + '><span class="ico-c sm">' + ic(ikon, 'ic-sm') + '</span><span class="grow" style="font-weight:500">' + judul + '</span>' + (kanan || '') + (extra === false ? '' : ic('chevron-right', 'chev')) + '</button>';
@@ -63,15 +93,23 @@
       '<div class="swatches">' + SWATCH.map((w) => '<button class="swatch ' + (w === warna ? 'on' : '') + '" data-warna="' + w + '" style="background:' + w + '" aria-label="Warna ' + w + '"' + (S.isAdmin() ? '' : ' disabled') + '>' + (w === warna ? ic('check', 'ic-sm') : '') + '</button>').join('') +
       (SWATCH.indexOf(warna) < 0 ? '<span class="swatch on" style="background:' + U.esc(warna) + '">' + ic('check', 'ic-sm') + '</span>' : '') +
       (S.isAdmin() ? '<label class="swatch add" aria-label="Warna lain">' + ic('plus', 'ic-sm') + '<input type="color" data-custom value="' + U.esc(warna.toLowerCase()) + '"></label>' : '') + '</div>' +
-      '<p class="small muted" style="margin:10px 0 0;display:flex;gap:6px;align-items:center">' + ic('lock', 'ic-sm') + 'Hanya Admin yang dapat mengubah warna</p>' +
+      (statusWarna === 'simpan' ? '<p class="small" style="margin:10px 0 0;display:flex;gap:8px;align-items:center;color:var(--primary)"><span class="spin-sm"></span>Menyimpan warna\u2026 (sudah terlihat di HP ini)</p>'
+        : statusWarna === 'ok' ? '<p class="small t-in" style="margin:10px 0 0;display:flex;gap:6px;align-items:center">' + ic('check', 'ic-sm') + 'Warna tersimpan. Anggota lain mendapat warna baru saat sinkron.</p>'
+        : statusWarna === 'gagal' ? '<p class="small t-out" style="margin:10px 0 0;display:flex;gap:6px;align-items:center">' + ic('triangle-alert', 'ic-sm') + 'Gagal menyimpan, warna dikembalikan.</p>'
+        : '<p class="small muted" style="margin:10px 0 0;display:flex;gap:6px;align-items:center">' + ic('lock', 'ic-sm') + 'Hanya Admin yang dapat mengubah warna</p>') +
       '<div class="hr"></div><div class="row" style="margin-bottom:10px"><span class="ico-c sm">' + ic('moon', 'ic-sm') + '</span><b style="font-weight:500">Mode tampilan</b></div>' +
-      '<div class="seg" data-tema>' + [['TERANG', 'Terang'], ['GELAP', 'Gelap'], ['OTOMATIS', 'Otomatis']].map((m) => '<button data-v="' + m[0] + '" class="' + (UI.Tema.mode() === m[0] ? 'on' : '') + '">' + m[1] + '</button>').join('') + '</div></div>';
+      '<div class="seg" data-tema>' + [['TERANG', 'Terang'], ['GELAP', 'Gelap'], ['OTOMATIS', 'Otomatis']].map((m) => '<button data-v="' + m[0] + '" class="' + (UI.Tema.mode() === m[0] ? 'on' : '') + '">' + m[1] + '</button>').join('') + '</div>' +
+      '<div class="hr"></div><div class="row" style="margin-bottom:10px"><span class="ico-c sm">' + ic('image', 'ic-sm') + '</span><b style="font-weight:500">Latar chat</b></div>' +
+      '<div class="row" style="align-items:flex-start"><div class="latar-prev' + (g.Chat.Latar.url ? ' ada' : '') + '"' + (g.Chat.Latar.url ? ' style="background-image:url(' + g.Chat.Latar.url + ')"' : '') + '></div>' +
+      '<div class="grow"><div class="row" style="gap:8px;flex-wrap:wrap"><label class="btn sm soft" data-latar-pilih>' + ic('image-plus', 'ic-sm') + 'Pilih dari galeri<input type="file" accept="image/*" data-latar-file hidden></label>' +
+      (g.Chat.Latar.url ? '<button class="btn sm ghost" data-latar-hapus>Pakai bawaan</button>' : '') + '</div>' +
+      '<p class="small muted" style="margin:8px 0 0">Gambar hanya tersimpan di HP ini, tidak dikirim ke server atau database.</p></div></div></div>';
 
     if (S.isAdmin() || S.fiturDompet()) {
       h += '<div class="sec">Dompet</div><div class="list-group">';
       if (S.isAdmin()) h += '<label class="list-row"><span class="ico-c sm">' + ic('wallet', 'ic-sm') + '</span><span class="grow"><b style="font-weight:500;display:block">Aktifkan fitur dompet</b><span class="small muted">Pisahkan saldo Tunai, Rekening, dan E-Wallet</span></span><span class="switch"><input type="checkbox" data-fitur' + (S.fiturDompet() ? ' checked' : '') + '><i></i></span></label>';
       if (S.isAdmin()) h += row('data-go="dompet"', 'sliders-horizontal', 'Kelola dompet', '<span class="small muted">' + S.dompetAktif().length + ' dompet</span>');
-      else h += row('', 'wallet', 'Dompet default', '<span class="small muted">' + U.esc(S.namaDompet(s.id_dompet_default)) + '</span>', false);
+      else h += row('data-go="akun"', 'wallet', 'Dompet default', '<span class="small muted">' + U.esc(labelDefault(s.id_dompet_default)) + '</span>');
       h += '</div>';
     }
     if (S.bolehKelola()) {
@@ -396,10 +434,11 @@
   // =============================================================
   UI.Router.daftar('akun', {
     template() { return UI.header({ title: 'Akun Saya' }) + '<div class="page-body" data-body></div>'; },
+    segarkan() { /* formulir: jangan digambar ulang oleh sinkron di latar (isian tidak boleh hilang) */ },
     show(el) {
       const s = S.saya;
       el.querySelector('[data-body]').innerHTML = '<div class="card"><label class="field"><span class="lbl">Nama tampilan</span><input class="input" data-nama maxlength="30" value="' + U.esc(s.nama) + '"></label>' +
-        (S.fiturDompet() ? '<span class="lbl" style="margin-top:16px">Dompet default</span><select class="select" data-dompet>' + S.dompetAktif().map((d) => '<option value="' + U.esc(d.id_dompet) + '"' + (d.id_dompet === s.id_dompet_default ? ' selected' : '') + '>' + U.esc(d.nama) + '</option>').join('') + '</select><p class="help">Dipakai bila chat tidak menyebut dompet.</p>' : '') +
+        (S.fiturDompet() ? '<span class="lbl" style="margin-top:16px">Dompet default</span><select class="select" data-dompet>' + opsiDefault(s.id_dompet_default) + '</select><p class="help">Dipakai bila chat tidak menyebut dompet. Pilih <b>Tanya dulu</b> agar CashKu menanyakan dompet yang dipakai (hanya dompet yang ada saldonya).</p>' : '') +
         '<button class="btn block" style="margin-top:16px" data-simpan-profil>Simpan profil</button></div>' +
         '<div class="sec">Ganti password</div><div class="card"><label class="field"><span class="lbl">Password lama</span><input class="input" type="password" data-lama autocomplete="current-password"></label>' +
         '<label class="field"><span class="lbl">Password baru</span><input class="input" type="password" data-baru autocomplete="new-password" minlength="6"></label><p class="help">Minimal 6 karakter.</p>' +
@@ -409,8 +448,16 @@
         const nama = el.querySelector('[data-nama]').value.trim();
         if (!nama) return UI.Toast.show('Nama wajib diisi', 'error');
         const dm = el.querySelector('[data-dompet]');
-        const res = await panggilOnline('profilSimpan', { nama_tampilan: nama, id_dompet_default: dm ? dm.value : s.id_dompet_default }, e.currentTarget);
-        if (res && res.success) { S.saya.nama = nama; if (dm) S.saya.id_dompet_default = dm.value; await S.simpanSesi(); UI.Toast.show('Profil disimpan', 'success'); }
+        if (!UI.perluOnline()) return;
+        const btn = e.currentTarget;
+        UI.tombolSibuk(btn, true);
+        const res = await g.API.api('profilSimpan', { nama_tampilan: nama, id_dompet_default: dm ? dm.value : s.id_dompet_default });
+        UI.tombolSibuk(btn, false);
+        if (!res.success) return UI.Toast.show('Gagal disimpan', 'error', res.message);
+        S.saya.nama = nama; if (dm) S.saya.id_dompet_default = dm.value;
+        await S.simpanSesi();
+        UI.Toast.show('Profil disimpan', 'success', dm && dm.value === 'TANYA' ? 'CashKu akan menanyakan dompet setiap mencatat.' : undefined);
+        g.Sync.sekarang({ paksaMaster: true });
       };
       el.querySelector('[data-ganti]').onclick = async (e) => {
         const lama = el.querySelector('[data-lama]').value, baru = el.querySelector('[data-baru]').value;
@@ -467,7 +514,7 @@
       '<div class="card" style="margin-top:16px;background:var(--info-bg);border:0" data-izinbox><div class="row" style="margin-bottom:12px">' + ic('lock-open') + '<b style="font-weight:500">Izin akses transaksi</b></div>' +
       '<label class="radio-card"><input type="radio" name="izin" value="SEMUA"' + (st.izin_lihat === 'SEMUA' ? ' checked' : '') + '><span><b>Semua transaksi keluarga</b><span class="small muted">Dapat melihat catatan belanja orang tua</span></span></label>' +
       '<label class="radio-card"><input type="radio" name="izin" value="SENDIRI"' + (st.izin_lihat !== 'SEMUA' ? ' checked' : '') + '><span><b>Milik sendiri saja</b><span class="small muted">Hanya melihat uang saku dan jajan pribadi</span></span></label></div>' +
-      (S.fiturDompet() ? '<span class="lbl" style="margin-top:16px">Dompet default</span><select class="select" data-dompet>' + S.dompetAktif().map((d) => '<option value="' + U.esc(d.id_dompet) + '"' + (d.id_dompet === st.id_dompet_default ? ' selected' : '') + '>' + U.esc(d.ikon || '') + ' ' + U.esc(d.nama) + '</option>').join('') + '</select>' : '') +
+      (S.fiturDompet() ? '<span class="lbl" style="margin-top:16px">Dompet default</span><select class="select" data-dompet>' + opsiDefault(st.id_dompet_default) + '</select>' : '') +
       '<div class="sheet-foot"><button class="btn block lg" data-simpan>Simpan Anggota</button><button class="btn block ghost" data-x2>Batal</button></div>' });
     const el = sh.el;
     const gambar = () => {

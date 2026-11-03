@@ -81,7 +81,11 @@
   S.lihatSemua = () => !!S.saya && (S.saya.peran !== 'ANAK' || S.saya.izin_lihat === 'SEMUA');
   S.bolehUbahTx = (t) => !!S.saya && (t.id_pengguna === S.saya.id || S.isAdmin());
   S.fiturDompet = () => String(S.master.pengaturan.fitur_dompet || 'ON') === 'ON';
-  S.namaKeluarga = () => S.master.pengaturan.nama_keluarga || 'Keluarga';
+  S.namaKeluarga = () => 'Keluarga';                 // tampilan cukup "Keluarga", tanpa nama keluarga
+  /** Judul transaksi untuk tampilan: pindah saldo dari nabung ditampilkan sebagai "Nabung" */
+  S.judulTx = (t) => t.jenis === 'SALDO' ? 'Penyesuaian saldo' : t.jenis !== 'PINDAH' ? t.keterangan : (/\b(me)?nabung\b/i.test(t.keterangan || '') ? 'Nabung' : 'Pindah saldo');
+  S.kelasJenis = (j) => (j === 'MASUK' ? 't-in' : j === 'KELUAR' ? 't-out' : 't-tr');
+  S.ikonTx = (t) => t.jenis === 'SALDO' ? '\u2696\ufe0f' : t.jenis === 'PINDAH' ? (S.judulTx(t) === 'Nabung' ? '\ud83d\udc37' : '\ud83d\udd04') : S.kat(t.id_kategori).ikon;
   S.dompetAktif = () => S.master.dompet.filter((d) => d.aktif !== false);
   S.anggotaAktif = () => S.master.anggota.filter((a) => a.aktif !== false);
   S.kategoriAktif = (jenis) => S.master.kategori.filter((k) => k.aktif !== false && (!jenis || k.jenis === jenis)).sort((a, b) => (a.urutan || 0) - (b.urutan || 0));
@@ -149,7 +153,7 @@
     }
     t.diubah_oleh = S.saya.id; t.diubah_pada = now; t._sync = 'pending';
     if (t.jenis !== 'PINDAH') t.id_dompet_tujuan = '';
-    if (t.jenis === 'PINDAH') t.id_kategori = '';
+    if (t.jenis === 'PINDAH' || t.jenis === 'SALDO') t.id_kategori = '';
     S.tx.set(t.id_transaksi, t);
     await g.DB.put('tx', t);
     await S.antre('tx.put', S.bersihTx(t), 'tx:' + t.id_transaksi, { baseVersi: t._base || 0 });
@@ -260,6 +264,7 @@
     let masuk = 0, keluar = 0, n = 0;
     const perKat = {}, perKatMasuk = {};
     list.forEach((t) => {
+      if (t.jenis === 'SALDO') return;                          // penyesuaian saldo bukan pemasukan/pengeluaran
       if (t.jenis === 'PINDAH') {
         if (f && f.dompet) { if (t.id_dompet_tujuan === f.dompet) masuk += t.nominal; else if (t.id_dompet === f.dompet) keluar += t.nominal; }
         return;
@@ -294,6 +299,7 @@
         if (t.jenis === 'MASUK' && t.id_dompet === d.id_dompet) s += t.nominal;
         else if (t.jenis === 'KELUAR' && t.id_dompet === d.id_dompet) s -= t.nominal;
         else if (t.jenis === 'PINDAH') { if (t.id_dompet === d.id_dompet) s -= t.nominal; if (t.id_dompet_tujuan === d.id_dompet) s += t.nominal; }
+        else if (t.jenis === 'SALDO' && t.id_dompet === d.id_dompet) s += t.nominal;
       });
       return { dompet: d, saldo: s };
     });

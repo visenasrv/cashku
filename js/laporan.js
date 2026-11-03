@@ -66,6 +66,7 @@
     let masuk = 0, keluar = 0;
     const perKat = {}, jumKat = {};
     list.forEach((t) => {
+      if (t.jenis === 'SALDO') return;
       if (t.jenis === 'PINDAH') {
         if (c.dompet) { if (t.id_dompet_tujuan === c.dompet) masuk += t.nominal; else keluar += t.nominal; }
         return;
@@ -74,7 +75,7 @@
       else { keluar += t.nominal; perKat[t.id_kategori] = (perKat[t.id_kategori] || 0) + t.nominal; jumKat[t.id_kategori] = (jumKat[t.id_kategori] || 0) + 1; }
     });
     const kat = Object.keys(perKat).map((id) => ({ id, k: S.kat(id), total: perKat[id], n: jumKat[id], persen: keluar ? (perKat[id] / keluar) * 100 : 0 })).sort((a, b) => b.total - a.total);
-    return { masuk, keluar, selisih: masuk - keluar, kat, jumlah: list.filter((t) => t.jenis !== 'PINDAH').length };
+    return { masuk, keluar, selisih: masuk - keluar, kat, jumlah: list.filter((t) => t.jenis === 'MASUK' || t.jenis === 'KELUAR').length };
   }
   function seriBulan(list, c) {
     let awal, n;
@@ -91,7 +92,7 @@
     const sumber = bulanA === bulanB && c.jenisPeriode !== 'tahun' ? S.txTerlihat({ mulai: awal, sampai: c.sampai, orang: c.orang, dompet: c.dompet }) : list;
     sumber.forEach((t) => {
       const o = out.find((x) => x.key === t.tanggal_transaksi.slice(0, 7));
-      if (!o || t.jenis === 'PINDAH') return;
+      if (!o || t.jenis === 'PINDAH' || t.jenis === 'SALDO') return;
       if (t.jenis === 'MASUK') o.masuk += t.nominal; else o.keluar += t.nominal;
     });
     return out;
@@ -173,7 +174,7 @@
       '<h4>Rincian per Kategori</h4><table><tr><th>Kategori</th><th class="r">Nominal</th><th class="r">%</th></tr>' +
       (r.kat.slice(0, 4).map((x) => '<tr><td>' + x.k.ikon + ' ' + U.esc(x.k.nama) + '</td><td class="r">' + U.rp(x.total) + '</td><td class="r">' + Math.round(x.persen) + '%</td></tr>').join('') || '<tr><td colspan="3" style="color:#667781">Belum ada pengeluaran</td></tr>') + '</table>' +
       '<h4>Catatan Transaksi Terakhir</h4><table><tr><th>Tgl</th><th>Oleh</th><th>Ket</th><th class="r">Nominal</th></tr>' +
-      (terakhir.map((t) => '<tr><td>' + U.tglPendek(t.tanggal_transaksi) + '</td><td>' + U.esc(S.orang(t.id_pengguna).nama) + '</td><td>' + U.esc(t.jenis === 'PINDAH' ? 'Pindah saldo' : t.keterangan) + '</td><td class="r" style="color:' + (t.jenis === 'MASUK' ? '#16A34A' : t.jenis === 'PINDAH' ? '#2563EB' : '#DC2626') + '">' + U.rpTanda(t.nominal, t.jenis) + '</td></tr>').join('') || '<tr><td colspan="4" style="color:#667781">Belum ada transaksi</td></tr>') + '</table>' +
+      (terakhir.map((t) => '<tr><td>' + U.tglPendek(t.tanggal_transaksi) + '</td><td>' + U.esc(S.orang(t.id_pengguna).nama) + '</td><td>' + U.esc(S.judulTx(t)) + '</td><td class="r" style="color:' + (t.jenis === 'MASUK' ? '#16A34A' : t.jenis === 'KELUAR' ? '#DC2626' : '#2563EB') + '">' + U.rpTanda(t.nominal, t.jenis) + '</td></tr>').join('') || '<tr><td colspan="4" style="color:#667781">Belum ada transaksi</td></tr>') + '</table>' +
       '<div class="af"><span>Dicetak ' + U.tglPanjang(U.hariIni()) + '</span><span>Data per ' + U.relatif(S.meta.lastSync) + '</span></div>';
   }
 
@@ -354,11 +355,11 @@
       startY: y,
       head: [['Tanggal', 'Pencatat', 'Keterangan', 'Kategori', S.fiturDompet() ? 'Dompet' : '', 'Nominal']],
       body: list.length ? list.map((t) => {
-        const pindah = t.jenis === 'PINDAH';
-        const nom = (t.jenis === 'MASUK' ? '+' : t.jenis === 'KELUAR' ? '-' : '') + rpP(t.nominal);
-        return [U.tglPendek(t.tanggal_transaksi) + ' ' + t.tanggal_transaksi.slice(0, 4), tp(S.orang(t.id_pengguna).nama), tp(pindah ? 'Pindah saldo' : t.keterangan),
-          pindah ? 'Pindah' : tp(S.kat(t.id_kategori).nama), S.fiturDompet() ? tp(pindah ? S.namaDompet(t.id_dompet) + ' -> ' + S.namaDompet(t.id_dompet_tujuan) : S.namaDompet(t.id_dompet)) : '',
-          { content: nom, styles: { textColor: t.jenis === 'MASUK' ? HIJAU : pindah ? BIRU : MERAH } }];
+        const pindah = t.jenis === 'PINDAH', saldo = t.jenis === 'SALDO';
+        const nom = (t.jenis === 'MASUK' ? '+' : t.jenis === 'KELUAR' ? '-' : saldo ? (t.nominal < 0 ? '-' : '+') : '') + rpP(t.nominal);
+        return [U.tglPendek(t.tanggal_transaksi) + ' ' + t.tanggal_transaksi.slice(0, 4), tp(S.orang(t.id_pengguna).nama), tp(S.judulTx(t)),
+          pindah ? 'Pindah' : saldo ? 'Penyesuaian' : tp(S.kat(t.id_kategori).nama), S.fiturDompet() ? tp(pindah ? S.namaDompet(t.id_dompet) + ' -> ' + S.namaDompet(t.id_dompet_tujuan) : S.namaDompet(t.id_dompet)) : '',
+          { content: nom, styles: { textColor: t.jenis === 'MASUK' ? HIJAU : t.jenis === 'KELUAR' ? MERAH : BIRU } }];
       }) : [[{ content: 'Belum ada transaksi pada periode ini.', colSpan: 6, styles: { textColor: ABU } }]],
       columnStyles: { 0: { cellWidth: 22 }, 1: { cellWidth: 22 }, 4: { cellWidth: S.fiturDompet() ? 30 : 0 }, 5: { halign: 'right', cellWidth: 28 } }
     }));

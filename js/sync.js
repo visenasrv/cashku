@@ -106,7 +106,7 @@
             const sv = r.server; sv._sync = 'ok'; sv._base = sv.versi;
             if (sv.status === 'DIHAPUS') { S.tx.delete(id); await g.DB.del('tx', id); } else { S.tx.set(id, sv); await g.DB.put('tx', sv); }
             berubah.push(id);
-            if (g.Chat) g.Chat.sistem('Transaksi “' + (sv.keterangan || op.data.keterangan) + '” juga diubah oleh ' + (r.pesan || 'anggota lain').replace(/^Diubah oleh /, '') + '. Versi terbaru yang dipakai.');
+            if (g.Chat) g.Chat.sistem('Transaksi “' + (sv.keterangan || op.data.keterangan) + '” juga diubah oleh ' + (r.pesan || 'anggota lain').replace(/^Diubah oleh /, '') + '. Versi terbaru yang dipakai.', true);
           }
         } else {
           // DITOLAK: kembalikan ke versi server
@@ -116,7 +116,7 @@
             else { S.tx.delete(id); await g.DB.del('tx', id); }
             berubah.push(id);
           } else perluMaster = true;
-          if (g.Chat) g.Chat.sistem('⚠️ Perubahan tidak tersimpan: ' + (r.pesan || 'ditolak server') + (isTx ? ' (“' + (op.data.keterangan || '') + '”)' : ''));
+          if (g.Chat) g.Chat.sistem('⚠️ Perubahan tidak tersimpan: ' + (r.pesan || 'ditolak server') + (isTx ? ' (“' + (op.data.keterangan || '') + '”)' : ''), true);
         }
       }
       if (perluMaster) S.meta.verMaster = '';
@@ -140,7 +140,7 @@
       if (dariLain && baru.length && g.Chat) {
         baru.forEach((x) => {
           const l = S.labelAnggaran(x.a);
-          g.Chat.sistem((x.level === 2 ? '🚨 ' : '⚠️ ') + 'Setelah sinkron: ' + l.lengkap + ' kini ' + Math.round(x.persen) + '% (' + U.rp(x.terpakai) + ' dari ' + U.rp(x.batas) + ').');
+          g.Chat.sistem((x.level === 2 ? '🚨 ' : '⚠️ ') + 'Setelah sinkron: ' + l.lengkap + ' kini ' + Math.round(x.persen) + '% (' + U.rp(x.terpakai) + ' dari ' + U.rp(x.batas) + ').', true);
         });
       }
       return true;

@@ -89,5 +89,25 @@
     },
     pakaiMemori: () => !!mem
   };
+
+  // Latar chat: gambar dari galeri, disimpan HANYA di HP ini (database terpisah, tidak ikut sinkron/keluar akun)
+  let ldbp = null; const lmem = new Map();
+  function bukaLatar() {
+    if (ldbp) return ldbp;
+    ldbp = new Promise((resolve) => {
+      if (!g.indexedDB) return resolve(null);
+      let req;
+      try { req = g.indexedDB.open('cashku-latar', 1); } catch (e) { return resolve(null); }
+      req.onupgradeneeded = () => { if (!req.result.objectStoreNames.contains('gambar')) req.result.createObjectStore('gambar'); };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => resolve(null);
+    });
+    return ldbp;
+  }
+  DB.latar = {
+    async get(uid) { const db = await bukaLatar(); if (!db) return lmem.get(uid) || null; return (await prom(db.transaction('gambar').objectStore('gambar').get(uid))) || null; },
+    async set(uid, v) { const db = await bukaLatar(); if (!db) { lmem.set(uid, v); return; } return prom(db.transaction('gambar', 'readwrite').objectStore('gambar').put(v, uid)); },
+    async hapus(uid) { const db = await bukaLatar(); if (!db) { lmem.delete(uid); return; } return prom(db.transaction('gambar', 'readwrite').objectStore('gambar').delete(uid)); }
+  };
   g.DB = DB;
 })(window);

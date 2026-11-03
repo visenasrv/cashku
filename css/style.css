@@ -128,7 +128,7 @@ button.list-row:active, a.list-row:active { background: var(--card-2); }
 }
 .input::placeholder { color: var(--faint); }
 .input:focus, .select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--tint); background: var(--card); }
-:root[data-theme="dark"] .input:focus, :root[data-theme="dark"] .select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(37, 211, 102, .15); }
+:root[data-theme="dark"] .input:focus, :root[data-theme="dark"] .select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--focus-ring, rgba(37, 211, 102, .15)); }
 .input.err { border-color: var(--expense); background: var(--danger-bg); color: var(--danger-text); }
 .err-msg { display: flex; align-items: center; gap: 6px; margin-top: 6px; font-size: 13px; color: var(--expense); }
 .help { margin-top: 6px; font-size: 13px; color: var(--muted); }
@@ -425,3 +425,21 @@ textarea.input { height: auto; min-height: 96px; padding: 12px 14px; resize: ver
 }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
 .kpi .card + .card { margin-top: 0; }
+
+/* Tekan lama pada gelembung chat */
+.bub { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; transition: filter .15s; }
+.msg.pilih .bub { filter: brightness(.92); box-shadow: 0 0 0 2px var(--accent); }
+:root[data-theme="dark"] .msg.pilih .bub { filter: brightness(1.25); }
+
+/* Latar chat dari galeri (hanya di HP ini) */
+.chat-page { --latar-redup: rgba(255, 255, 255, .08); }
+:root[data-theme="dark"] .chat-page { --latar-redup: rgba(11, 20, 26, .5); }
+.chat-page.ada-latar { background: linear-gradient(var(--latar-redup), var(--latar-redup)), var(--latar-img) center / cover no-repeat, var(--chat-bg); }
+.chat-page.ada-latar .chat-scroll, .chat-page.ada-latar .chat-bottom { background: transparent; }
+:root[data-theme="dark"] .chat-page.ada-latar .chat-bottom { border-top-color: transparent; }
+.chat-page.ada-latar .chat-bottom .chip:not(.acc) { box-shadow: var(--sh-1); }
+.latar-prev { width: 64px; height: 96px; border-radius: 10px; flex: none; border: 1px solid var(--line); background-color: var(--chat-bg); background-image: radial-gradient(var(--chat-dot) 1.2px, transparent 1.4px); background-size: 10px 10px; }
+.latar-prev.ada { background-size: cover; background-position: center; }
+label.btn { cursor: pointer; }
+label.btn.sibuk { opacity: .6; pointer-events: none; }
+.spin-sm { width: 14px; height: 14px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: spin .7s linear infinite; flex: none; display: inline-block; }

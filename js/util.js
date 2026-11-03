@@ -21,6 +21,7 @@
   U.rpTanda = (n, jenis) => {
     if (jenis === 'MASUK') return '+' + U.rp(n);
     if (jenis === 'KELUAR') return '−' + U.rp(n);
+    if (jenis === 'SALDO') return U.rpSelisih(n);
     return U.rp(n);
   };
   U.rpSelisih = (n) => (n < 0 ? '−' : '+') + U.rp(n);
@@ -93,6 +94,8 @@
       onAccent: U.luminance(a) > 0.35 ? '#111B21' : '#FFFFFF'
     };
   };
+  // Campur dua warna hex: t=0 → a, t=1 → b
+  U.campur = (a, b, t) => { const x = U.hexRgb(a), y = U.hexRgb(b); return U.rgbHex(x[0] + (y[0] - x[0]) * t, x[1] + (y[1] - x[1]) * t, x[2] + (y[2] - x[2]) * t); };
   U.alpha = (hex, a) => { const c = U.hexRgb(hex); return 'rgba(' + c[0] + ',' + c[1] + ',' + c[2] + ',' + a + ')'; };
 
   U.inisial = (nama) => String(nama || '?').trim().split(/\s+/).map((w) => w[0]).join('').slice(0, 2).toUpperCase();

@@ -154,7 +154,7 @@
   });
 
   function labelFilter(f) {
-    if (f === 'jenis') return R.jenis ? ({ KELUAR: 'Pengeluaran', MASUK: 'Pemasukan', PINDAH: 'Pindah saldo' })[R.jenis] : 'Jenis';
+    if (f === 'jenis') return R.jenis ? ({ KELUAR: 'Pengeluaran', MASUK: 'Pemasukan', PINDAH: 'Pindah saldo', SALDO: 'Penyesuaian saldo' })[R.jenis] : 'Jenis';
     if (f === 'kategori') return R.kategori ? S.kat(R.kategori).nama : 'Kategori';
     if (f === 'dompet') return R.dompet ? S.namaDompet(R.dompet) : 'Dompet';
     if (f === 'orang') return R.orang ? S.orang(R.orang).nama : 'Orang';
@@ -163,7 +163,7 @@
   }
   async function pilihFilter(el, f) {
     let opsi = [{ value: '', label: 'Semua' }];
-    if (f === 'jenis') opsi = opsi.concat([{ value: 'KELUAR', label: 'Pengeluaran' }, { value: 'MASUK', label: 'Pemasukan' }].concat(S.fiturDompet() ? [{ value: 'PINDAH', label: 'Pindah saldo' }] : []));
+    if (f === 'jenis') opsi = opsi.concat([{ value: 'KELUAR', label: 'Pengeluaran' }, { value: 'MASUK', label: 'Pemasukan' }].concat(S.fiturDompet() ? [{ value: 'PINDAH', label: 'Pindah saldo' }, { value: 'SALDO', label: 'Penyesuaian saldo' }] : []));
     if (f === 'kategori') opsi = opsi.concat(S.kategoriAktif().map((k) => ({ value: k.id_kategori, label: k.nama, ikon: k.ikon, sub: k.jenis === 'MASUK' ? 'Pemasukan' : '' })));
     if (f === 'dompet') opsi = opsi.concat(S.dompetAktif().map((d) => ({ value: d.id_dompet, label: d.nama, ikon: d.ikon })));
     if (f === 'orang') opsi = opsi.concat(S.master.anggota.map((a) => ({ value: a.id, label: a.nama })));
@@ -200,13 +200,14 @@
     el.querySelector('[data-list]').innerHTML = h;
   }
   function itemTx(t) {
-    const pindah = t.jenis === 'PINDAH', k = pindah ? { ikon: '🔄', warna: '#2563EB', nama: 'Pindah saldo' } : S.kat(t.id_kategori);
-    const meta = [S.lihatSemua() ? S.orang(t.id_pengguna).nama : '', pindah ? S.namaDompet(t.id_dompet) + ' → ' + S.namaDompet(t.id_dompet_tujuan) : k.nama, !pindah && S.fiturDompet() && t.id_dompet ? S.namaDompet(t.id_dompet) : '', U.jam(t.waktu_catat)].filter(Boolean).join(' · ');
+    const pindah = t.jenis === 'PINDAH', saldo = t.jenis === 'SALDO';
+    const k = pindah || saldo ? { ikon: S.ikonTx(t), warna: saldo ? '#64748B' : '#2563EB', nama: S.judulTx(t) } : S.kat(t.id_kategori);
+    const meta = [S.lihatSemua() ? S.orang(t.id_pengguna).nama : '', pindah ? S.namaDompet(t.id_dompet) + ' → ' + S.namaDompet(t.id_dompet_tujuan) : saldo ? S.namaDompet(t.id_dompet) + ' · ' + t.keterangan : k.nama, !pindah && !saldo && S.fiturDompet() && t.id_dompet ? S.namaDompet(t.id_dompet) : '', U.jam(t.waktu_catat)].filter(Boolean).join(' · ');
     const st = S.statusTx(t.id_transaksi);
     const badge = t.status === 'DIBATALKAN' ? '<span class="badge b-slate">Dibatalkan</span>' : st === 'pending' ? '<span class="badge b-amber">Menunggu kirim</span>' : st === 'gagal' ? '<span class="badge b-red">Gagal</span>' : '';
     return '<button class="tx-item' + (t.status !== 'AKTIF' ? ' batal' : '') + '" data-tx="' + U.esc(t.id_transaksi) + '"><span class="emo" style="background:' + U.alpha(k.warna || '#94A3B8', 0.16) + '">' + k.ikon + '</span>' +
-      '<span class="grow"><span class="ttl ellip" style="display:block">' + U.esc(pindah ? 'Pindah saldo' : t.keterangan) + '</span><span class="sub ellip" style="display:block">' + U.esc(meta) + '</span></span>' +
-      '<span style="text-align:right"><span class="amt num ' + (pindah ? 't-tr' : t.jenis === 'MASUK' ? 't-in' : 't-out') + '" style="display:block">' + U.rpTanda(t.nominal, t.jenis) + '</span>' + badge + '</span></button>';
+      '<span class="grow"><span class="ttl ellip" style="display:block">' + U.esc(S.judulTx(t)) + '</span><span class="sub ellip" style="display:block">' + U.esc(meta) + '</span></span>' +
+      '<span style="text-align:right"><span class="amt num ' + S.kelasJenis(t.jenis) + '" style="display:block">' + U.rpTanda(t.nominal, t.jenis) + '</span>' + badge + '</span></button>';
   }
 
   // =============================================================
@@ -217,6 +218,7 @@
       opt = opt || {};
       const t = S.tx.get(id);
       if (!t) return UI.Toast.show('Transaksi tidak ditemukan', 'error');
+      if (t.jenis === 'SALDO') return EditTx.saldo(t);
       const boleh = S.bolehUbahTx(t) && t.status === 'AKTIF';
       const fitur = S.fiturDompet();
       const pencatat = S.orang(t.id_pengguna).nama;
@@ -294,6 +296,19 @@
         UI.Toast.show('Transaksi dihapus', 'success');
       };
     }
+  };
+  EditTx.saldo = function (t) {
+    const boleh = S.bolehUbahTx(t) && t.status === 'AKTIF';
+    const sh = UI.Sheet.open({ title: 'Penyesuaian saldo', sub: 'Dicatat oleh ' + S.orang(t.id_pengguna).nama + ' \u00b7 ' + U.tglPanjang(t.tanggal_transaksi) + (U.jam(t.waktu_catat) ? ', ' + U.jam(t.waktu_catat) : ''), html:
+      '<div class="inline-card"><div class="ln" style="display:flex;justify-content:space-between"><span class="muted">Dompet</span><b>' + U.esc(S.namaDompet(t.id_dompet)) + '</b></div>' +
+      '<div class="ln" style="display:flex;justify-content:space-between"><span class="muted">Disesuaikan</span><b class="num t-tr">' + U.rpSelisih(t.nominal) + '</b></div>' +
+      '<div class="ln" style="display:flex;justify-content:space-between"><span class="muted">Keterangan</span><span>' + U.esc(t.keterangan) + '</span></div></div>' +
+      (t.teks_asli ? '<p class="small muted" style="margin-top:12px">Dari chat: \u201c' + U.esc(t.teks_asli) + '\u201d</p>' : '') +
+      '<p class="help">Penyesuaian saldo tidak dihitung sebagai pemasukan atau pengeluaran. Untuk mengubahnya, ketik lagi di chat, misalnya \u201csaldo bank sekarang 5jt\u201d.</p>' +
+      '<div class="sheet-foot">' + (boleh ? '<button class="btn block text-danger" data-hapus>' + ic('trash-2') + 'Hapus penyesuaian</button>' : '<button class="btn block outline" data-tutup>Tutup</button>') + '</div>' });
+    const h = sh.el.querySelector('[data-hapus]');
+    if (h) h.onclick = async () => { await S.ubahStatusTx(t.id_transaksi, 'DIHAPUS'); sh.close(); UI.Toast.show('Penyesuaian saldo dihapus', 'success'); };
+    const c = sh.el.querySelector('[data-tutup]'); if (c) c.onclick = () => sh.close();
   };
   g.EditTx = EditTx;
 })(window);

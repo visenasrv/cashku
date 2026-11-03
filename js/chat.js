@@ -38,6 +38,7 @@
       });
       Chat.input.addEventListener('input', Chat.autoTinggi);
       Chat.scroll.addEventListener('click', Chat.klikDalam);
+      Chat.pasangTekanLama();
       el.querySelector('[data-saran]').addEventListener('click', (e) => {
         const b = e.target.closest('[data-t]'); if (b) Chat.kirim(b.dataset.t);
       });
@@ -47,13 +48,78 @@
       S.on('master', () => { Chat.header(); Chat.saran(); });
     },
     show(el) {
-      Chat.header(); Chat.saran(); Chat.statusHeader();
+      Chat.header(); Chat.saran(); Chat.statusHeader(); Chat.Latar.muat();
       if (!Chat._dirender || el.dataset.kotor) { Chat.renderSemua(); Chat._dirender = true; }
       if (!S.chat.length) Chat.sambutan();
       requestAnimationFrame(() => Chat.keBawah());
     },
     segarkan() { Chat.header(); Chat.statusHeader(); }
   });
+
+  // =============================================================
+  // Latar chat dari galeri — hanya di HP ini (IndexedDB), tidak pernah dikirim ke server
+  // =============================================================
+  const MAKS_SISI = 1600;
+  function muatGambar(file) {
+    if (g.createImageBitmap) return g.createImageBitmap(file).catch(() => muatImg(file));
+    return muatImg(file);
+  }
+  function muatImg(file) {
+    return new Promise((res, rej) => {
+      const u = URL.createObjectURL(file), im = new Image();
+      im.onload = () => { URL.revokeObjectURL(u); res(im); };
+      im.onerror = () => { URL.revokeObjectURL(u); rej(new Error('Format gambar tidak didukung.')); };
+      im.src = u;
+    });
+  }
+  async function kecilkan(file) {
+    const im = await muatGambar(file);
+    const w0 = im.width, h0 = im.height;
+    if (!w0 || !h0) throw new Error('Gambar kosong.');
+    const k = Math.min(1, MAKS_SISI / Math.max(w0, h0));
+    const c = document.createElement('canvas');
+    c.width = Math.round(w0 * k); c.height = Math.round(h0 * k);
+    c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
+    if (im.close) im.close();
+    const blob = await new Promise((res) => c.toBlob(res, 'image/jpeg', 0.82));
+    if (!blob) throw new Error('Gambar tidak bisa diproses.');
+    return blob;
+  }
+  Chat.Latar = {
+    url: null, _uid: null,
+    async muat() {
+      const uid = S.saya && S.saya.id;
+      if (!uid) return;
+      if (Chat.Latar._uid === uid) return Chat.Latar.terapkan();
+      Chat.Latar._uid = uid;
+      let v = null; try { v = await g.DB.latar.get(uid); } catch (e) {}
+      Chat.Latar._set(v && v.buf ? new Blob([v.buf], { type: v.type || 'image/jpeg' }) : null);
+    },
+    _set(blob) {
+      if (Chat.Latar.url) URL.revokeObjectURL(Chat.Latar.url);
+      Chat.Latar.url = blob ? URL.createObjectURL(blob) : null;
+      Chat.Latar.terapkan();
+    },
+    terapkan() {
+      if (!Chat.el) return;
+      Chat.el.classList.toggle('ada-latar', !!Chat.Latar.url);
+      if (Chat.Latar.url) Chat.el.style.setProperty('--latar-img', 'url("' + Chat.Latar.url + '")');
+      else Chat.el.style.removeProperty('--latar-img');
+    },
+    async pasang(file) {
+      if (!file || !/^image\//.test(file.type || 'image/')) throw new Error('Pilih file gambar.');
+      const uid = S.saya && S.saya.id; if (!uid) return;
+      const blob = await kecilkan(file);
+      const buf = await new Response(blob).arrayBuffer();
+      await g.DB.latar.set(uid, { buf: buf, type: blob.type, diubah: Date.now() });
+      Chat.Latar._uid = uid; Chat.Latar._set(blob);
+    },
+    async hapus() {
+      const uid = S.saya && S.saya.id; if (!uid) return;
+      try { await g.DB.latar.hapus(uid); } catch (e) {}
+      Chat.Latar._uid = uid; Chat.Latar._set(null);
+    }
+  };
 
   Chat.autoTinggi = () => { const t = Chat.input; t.style.height = 'auto'; t.style.height = Math.min(120, t.scrollHeight) + 'px'; };
   Chat.keBawah = () => { if (Chat.scroll) Chat.scroll.scrollTop = Chat.scroll.scrollHeight; };
@@ -104,6 +170,7 @@
     m.t = m.t || Date.now();
     m.u = S.saya.id;
     m.from = m.from || 'bot';
+    if (m.from !== 'me' && m.ref === undefined) m.ref = Chat._ref || null;   // balasan ditautkan ke pesan pengguna
     S.chat.push(m);
     await g.DB.put('chat', m);
     if (Chat.scroll && !Chat.el.hidden) {
@@ -120,7 +187,8 @@
     if (el) { const i = S.chat.indexOf(m); el.outerHTML = Chat.htmlPesan(m, S.chat[i - 1]); }
   };
   Chat.cari = (id) => S.chat.find((m) => m.id === id);
-  Chat.sistem = (teks) => Chat.tambah({ kind: 'teks', data: { teks } });
+  /** lepas=true: pesan sistem (mis. hasil sinkron) yang tidak terkait pesan mana pun */
+  Chat.sistem = (teks, lepas) => Chat.tambah(Object.assign({ kind: 'teks', data: { teks } }, lepas ? { ref: null } : {}));
 
   Chat.dayChip = (t) => {
     const s = U.tglStr(new Date(t)), hi = U.hariIni();
@@ -166,18 +234,19 @@
 
   function txRowHtml(t) {
     if (!t) return '<div class="tx-row"><div class="grow muted small">Transaksi sudah dihapus.</div></div>';
-    const pindah = t.jenis === 'PINDAH';
-    const k = pindah ? { ikon: '🔄', warna: '#2563EB', nama: 'Pindah saldo' } : S.kat(t.id_kategori);
+    const pindah = t.jenis === 'PINDAH', saldo = t.jenis === 'SALDO';
+    const k = pindah || saldo ? { ikon: S.ikonTx(t), warna: saldo ? '#64748B' : '#2563EB', nama: S.judulTx(t) } : S.kat(t.id_kategori);
     const dompet = S.fiturDompet() && t.id_dompet ? S.namaDompet(t.id_dompet) : '';
     let sub;
-    if (pindah) sub = S.namaDompet(t.id_dompet) + ' → ' + S.namaDompet(t.id_dompet_tujuan);
-    else if (t.jenis === 'MASUK') sub = (t.keterangan.toLowerCase() === k.nama.toLowerCase() ? 'Pemasukan' : k.nama) + (dompet ? ' · ' + dompet : '');
-    else sub = k.nama + (dompet ? ' · ' + dompet : '');
+    if (pindah) sub = S.namaDompet(t.id_dompet) + ' \u2192 ' + S.namaDompet(t.id_dompet_tujuan);
+    else if (saldo) sub = S.namaDompet(t.id_dompet) + ' \u00b7 ' + t.keterangan;
+    else if (t.jenis === 'MASUK') sub = (t.keterangan.toLowerCase() === k.nama.toLowerCase() ? 'Pemasukan' : k.nama) + (dompet ? ' \u00b7 ' + dompet : '');
+    else sub = k.nama + (dompet ? ' \u00b7 ' + dompet : '');
     if (t.tanggal_transaksi !== U.tglStr(new Date(Date.parse(t.waktu_catat) || Date.now()))) sub += ' · ' + U.tglPendek(t.tanggal_transaksi);
     if (t.id_pengguna !== S.saya.id) sub += ' · ' + S.orang(t.id_pengguna).nama;
     const st = S.statusTx(t.id_transaksi);
     const batal = t.status !== 'AKTIF';
-    const kelasAmt = pindah ? 't-tr' : t.jenis === 'MASUK' ? 't-in' : 't-out';
+    const kelasAmt = S.kelasJenis(t.jenis);
     let act = '';
     if (batal) act = '<span class="badge b-slate">Dibatalkan</span>';
     else {
@@ -186,7 +255,7 @@
       if (S.bolehUbahTx(t)) act += '<button class="ubah" data-ubah="' + U.esc(t.id_transaksi) + '">Ubah</button>';
     }
     return '<div class="tx-row' + (batal ? ' batal' : '') + '" data-tx="' + U.esc(t.id_transaksi) + '"><span class="emo" style="background:' + U.alpha(k.warna || '#94A3B8', 0.16) + '">' + k.ikon + '</span>' +
-      '<div class="grow"><div class="ttl ellip">' + U.esc(pindah ? 'Pindah saldo' : t.keterangan) + '</div><div class="sub">' + U.esc(sub) + '</div></div>' +
+      '<div class="grow"><div class="ttl ellip">' + U.esc(S.judulTx(t)) + '</div><div class="sub">' + U.esc(sub) + '</div></div>' +
       '<div class="rt"><div class="amt num ' + kelasAmt + '">' + U.rpTanda(t.nominal, t.jenis) + '</div><div class="act">' + act + '</div></div></div>';
   }
   Chat.txRowHtml = txRowHtml;
@@ -198,6 +267,7 @@
       const d = m.data;
       let h = d.ids.length > 1 ? '<div class="bhead">' + ic('sparkles', 'ic-sm') + d.ids.length + ' transaksi tercatat</div>' : '';
       h += d.ids.map((id) => txRowHtml(S.tx.get(id))).join('');
+      if (d.saldo) h += '<div class="small muted" style="padding:2px 0 4px">Saldo ' + U.esc(d.saldo.dompet) + ': ' + (d.saldo.dari < 0 ? '\u2212' : '') + U.rp(d.saldo.dari) + ' \u2192 <b style="color:var(--text)">' + U.rp(d.saldo.ke) + '</b></div>';
       (d.warn || []).forEach((w) => {
         h += '<div class="warn-strip' + (w.level === 2 ? ' red' : '') + '">' + U.esc(w.teks) + '<div class="prog ' + (w.level === 2 ? 'l2' : 'l1') + '"><i style="width:' + Math.min(100, w.persen) + '%"></i></div></div>';
       });
@@ -229,11 +299,11 @@
     },
     bantuan(m) {
       const contoh = [['Catat pengeluaran', 'beli kopi 25rb'], ['Beberapa sekaligus', 'bensin 25rb, makan siang 30rb'], ['Pemasukan', 'gaji masuk bri 5jt'],
-        ['Pindah saldo', 'top up gopay 100rb dari bri'], ['Tanya', 'jajan bulan ini?'], ['Unduh laporan', 'unduh laporan bulan ini'], ['Batalkan', 'batal']];
+        ['Pindah saldo', 'top up gopay 100rb dari bri'], ['Nabung (tunai → rekening)', 'nabung 500rb'], ['Atur saldo dompet', 'saldo bank sekarang 5jt'], ['Tanya', 'jajan bulan ini?'], ['Unduh laporan', 'unduh laporan bulan ini'], ['Batalkan', 'batal']];
       return {
         html: '<p>' + teksAman(m.data.teks || 'Cukup ketik seperti mengobrol. Contoh:') + '</p>' +
           contoh.map((c) => '<div class="ln" style="display:flex;justify-content:space-between;gap:8px;padding:4px 0"><span class="muted small">' + c[0] + '</span><button class="link small" data-isi="' + U.esc(c[1]) + '">' + U.esc(c[1]) + '</button></div>').join('') +
-          '<p class="small muted" style="margin-top:8px">Ketuk contoh untuk mencobanya. Kata yang belum saya kenal cukup dikoreksi sekali.</p>',
+          '<p class="small muted" style="margin-top:8px">Ketuk contoh untuk mencobanya. Kata yang belum saya kenal cukup dikoreksi sekali. Tekan lama sebuah pesan untuk menghapusnya — transaksinya ikut dibatalkan.</p>',
         lebar: true
       };
     }
@@ -255,6 +325,7 @@
   // Interaksi di dalam gelembung
   // =============================================================
   Chat.klikDalam = function (e) {
+    if (Date.now() - (Chat._abaikanKlik || 0) < 500) return;
     const lama = e.target.closest('[data-lama]');
     if (lama) { Chat._tampil += 150; Chat.renderSemua(); return; }
     const ub = e.target.closest('[data-ubah]');
@@ -275,7 +346,13 @@
     await Chat.ubah(m);
   }
 
+  /** Tindakan dari tombol di gelembung; balasannya ikut ditautkan ke pesan pengguna yang sama */
   Chat.aksi = async function (m, c, i) {
+    const sebelum = Chat._ref;
+    Chat._ref = m.ref || null;
+    try { return await aksiDalam(m, c, i); } finally { Chat._ref = sebelum; }
+  };
+  async function aksiDalam(m, c, i) {
     const v = c.nilai || {};
     switch (c.aksi) {
       case 'kirim': if (!c.tetap) await tandai(m, i); return Chat.kirim(v.teks);
@@ -300,10 +377,9 @@
       case 'nominal': {
         await tandai(m, i);
         const d = m.data.draft; d.nominal = v.n; d.nominalRagu = false;
-        if (d.jenis === 'PINDAH' && d.dompetRagu) { Chat.antreKlar.unshift({ type: 'dompet', d, batch: m.data.batch, teksAsli: m.data.teksAsli }); }
-        else await Chat.simpanDrafts([d], m.data.teksAsli, m.data.batch);
         Chat.pending = null;
-        return Chat.lanjutKlar();
+        if (d.jenis === 'PINDAH' && d.dompetRagu) { Chat.antreKlar.unshift({ type: 'dompet', d, batch: m.data.batch, teksAsli: m.data.teksAsli }); return Chat.lanjutKlar(); }
+        return Chat.selesaikanDraft(d, { batch: m.data.batch, teksAsli: m.data.teksAsli });
       }
       case 'dompet': {
         await tandai(m, i);
@@ -312,6 +388,20 @@
         d.dompetRagu = !d.id_dompet || !d.id_dompet_tujuan || d.id_dompet === d.id_dompet_tujuan;
         if (d.dompetRagu) Chat.antreKlar.unshift({ type: 'dompet', d, batch: m.data.batch, teksAsli: m.data.teksAsli });
         else await Chat.simpanDrafts([d], m.data.teksAsli, m.data.batch);
+        return Chat.lanjutKlar();
+      }
+      case 'dompetBayar': {
+        await tandai(m, i);
+        if (Chat.pending && Chat.pending.type === 'dompetBayar') Chat.pending = null;
+        const ds = m.data.drafts;
+        ds.forEach((x) => { x.id_dompet = v.id; x.tanyaDompet = false; x.dompetPilihan = null; });
+        await Chat.simpanDrafts(ds, m.data.teksAsli, m.data.batch);
+        return Chat.lanjutKlar();
+      }
+      case 'saldoDompet': {
+        await tandai(m, i);
+        if (Chat.pending && Chat.pending.type === 'saldoDompet') Chat.pending = null;
+        await Chat.terapkanSaldo(v.id, m.data.it.nominal, m.data.teksAsli, m.data.batch);
         return Chat.lanjutKlar();
       }
       case 'batalYa': {
@@ -329,8 +419,100 @@
       case 'koreksiBukan': await tandai(m, i); return Chat.sistem('Oke. Coba ketik ulang, misalnya: **unduh laporan bulan ini**.');
       default: return null;
     }
-  };
+  }
   function b(m, i) { return Chat.scroll && Chat.scroll.querySelector('[data-id="' + m.id + '"] [data-i="' + i + '"]'); }
+
+  // =============================================================
+  // Hapus pesan (tekan lama / klik kanan) → transaksinya ikut dibatalkan
+  // =============================================================
+  Chat.pasangTekanLama = function () {
+    const sc = Chat.scroll;
+    let timer = null, x0 = 0, y0 = 0;
+    const batal = () => { clearTimeout(timer); timer = null; };
+    sc.addEventListener('pointerdown', (e) => {
+      const bub = e.target.closest('.bub');
+      if (!bub || e.target.closest('button, a')) return;
+      x0 = e.clientX; y0 = e.clientY;
+      batal();
+      timer = setTimeout(() => {
+        timer = null;
+        Chat._abaikanKlik = Date.now();
+        if (navigator.vibrate) try { navigator.vibrate(12); } catch (er) {}
+        Chat.menuPesan(bub.closest('.msg').dataset.id);
+      }, 480);
+    });
+    sc.addEventListener('pointermove', (e) => { if (timer && (Math.abs(e.clientX - x0) > 8 || Math.abs(e.clientY - y0) > 8)) batal(); });
+    ['pointerup', 'pointercancel', 'pointerleave'].forEach((ev) => sc.addEventListener(ev, batal));
+    sc.addEventListener('contextmenu', (e) => {
+      const msg = e.target.closest('.msg');
+      if (!msg) return;
+      e.preventDefault();
+      if (Date.now() - (Chat._abaikanKlik || 0) < 800) return;      // sudah dibuka oleh tekan lama
+      Chat.menuPesan(msg.dataset.id);
+    });
+  };
+
+  /** Pesan-pesan yang ikut terhapus + transaksi yang ikut dibatalkan bila pesan m dihapus */
+  Chat.dampakHapus = function (m) {
+    let pesan = [m];
+    if (m.from === 'me') {
+      const terkait = S.chat.filter((x) => x.from !== 'me' && x.ref === m.id);
+      if (terkait.length) pesan = pesan.concat(terkait);
+      else {
+        // Pesan lama (sebelum fitur ini): balasan = gelembung bot berikutnya sampai pesan pengguna berikutnya
+        for (let i = S.chat.indexOf(m) + 1; i < S.chat.length && S.chat[i].from !== 'me'; i++) if (S.chat[i].ref === undefined) pesan.push(S.chat[i]);
+      }
+    }
+    const ids = new Set();
+    pesan.forEach((x) => { if (x.kind === 'tx') x.data.ids.forEach((id) => ids.add(id)); });
+    if (m.from === 'me' && m.data.batch) S.tx.forEach((t) => { if (t.id_batch === m.data.batch) ids.add(t.id_transaksi); });
+    const tx = Array.from(ids).map((id) => S.tx.get(id)).filter((t) => t && t.status === 'AKTIF' && S.bolehUbahTx(t));
+    return { pesan, tx };
+  };
+
+  Chat.menuPesan = async function (id) {
+    const m = Chat.cari(id);
+    if (!m) return;
+    const el = Chat.scroll.querySelector('[data-id="' + id + '"]');
+    if (el) el.classList.add('pilih');
+    const teks = m.data && m.data.teks ? String(m.data.teks).replace(/\*\*/g, '') : '';
+    const dampak = Chat.dampakHapus(m);
+    const opsi = [];
+    if (teks) opsi.push({ value: 'salin', label: 'Salin teks', ikon: '📋' });
+    opsi.push({ value: 'hapus', label: dampak.tx.length ? 'Hapus pesan & batalkan ' + dampak.tx.length + ' transaksi' : 'Hapus pesan', ikon: '🗑️' });
+    const v = await UI.Sheet.pilih({ judul: m.from === 'me' ? '“' + (teks.length > 40 ? teks.slice(0, 40) + '…' : teks) + '”' : 'Pesan CashKu', opsi });
+    if (el) el.classList.remove('pilih');
+    if (v === 'salin') {
+      try { await navigator.clipboard.writeText(teks); UI.Toast.show('Teks disalin', 'success'); } catch (e) { UI.Toast.show('Tidak bisa menyalin', 'error'); }
+    } else if (v === 'hapus') return Chat.hapusPesan(m);
+    return null;
+  };
+
+  Chat.hapusPesan = async function (m) {
+    const d = Chat.dampakHapus(m);
+    if (d.tx.length) {
+      const total = d.tx.reduce((a, t) => a + (t.jenis === 'PINDAH' ? 0 : t.nominal), 0);
+      const daftar = d.tx.map((t) => '<div style="display:flex;justify-content:space-between;gap:8px;padding:4px 0"><span>' + U.esc(S.judulTx(t)) + '</span><b class="num ' + (t.jenis === 'MASUK' ? 't-in' : t.jenis === 'PINDAH' ? 't-tr' : 't-out') + '">' + U.rpTanda(t.nominal, t.jenis) + '</b></div>').join('');
+      const ok = await UI.Sheet.konfirmasi({
+        judul: 'Hapus pesan ini?',
+        isiHtml: 'Transaksi dari pesan ini ikut <b>dibatalkan</b>:<div class="inline-card" style="margin-top:10px">' + daftar + '</div>' + (d.tx.length > 1 && total ? '<div class="small" style="margin-top:6px;text-align:right">Total ' + U.rp(total) + '</div>' : ''),
+        ok: 'Hapus & batalkan', batal: 'Jangan hapus', bahaya: true
+      });
+      if (!ok) return;
+    } else {
+      const ok = await UI.Sheet.konfirmasi({ judul: 'Hapus pesan ini?', isi: 'Pesan dihapus dari chat di HP ini.', ok: 'Hapus', batal: 'Batal', bahaya: true });
+      if (!ok) return;
+    }
+    for (const t of d.tx) await S.ubahStatusTx(t.id_transaksi, 'DIBATALKAN');
+    const hapusIds = new Set(d.pesan.map((x) => x.id));
+    S.chat = S.chat.filter((x) => !hapusIds.has(x.id));
+    await g.DB.delMany('chat', Array.from(hapusIds));
+    // Pertanyaan lanjutan dari pesan yang dihapus tidak perlu dijawab lagi
+    if (m.from === 'me' && !S.chat.some((x) => x.from === 'me' && x.t > m.t)) { Chat.pending = null; Chat.antreKlar = []; }
+    if (d.tx.length) S.cekPeringatan();
+    Chat.renderSemua();
+    UI.Toast.show('Pesan dihapus', 'success', d.tx.length ? d.tx.length + ' transaksi dibatalkan' + (navigator.onLine === false ? ' (terkirim saat online)' : '') : '');
+  };
 
   // =============================================================
   // Kirim & proses
@@ -338,8 +520,10 @@
   Chat.kirim = async function (teks) {
     teks = String(teks || '').trim();
     if (!teks) return;
-    await Chat.tambah({ from: 'me', kind: 'teks', data: { teks } });
-    try { await Chat.proses(teks); } catch (e) { console.error(e); Chat.sistem('Maaf, terjadi kesalahan: ' + e.message); }
+    const um = await Chat.tambah({ from: 'me', kind: 'teks', data: { teks } });
+    const sebelum = Chat._ref;
+    Chat._ref = um.id;
+    try { await Chat.proses(teks); } catch (e) { console.error(e); Chat.sistem('Maaf, terjadi kesalahan: ' + e.message); } finally { Chat._ref = sebelum; }
   };
 
   Chat.proses = async function (teks) {
@@ -348,6 +532,10 @@
       const n = P.nominalSaja(teks);
       Chat.pending = null;
       if (n && (p.type === 'harga' || p.type === 'nominal')) return p.jawab(n);
+      if (p.type === 'dompetBayar' || p.type === 'saldoDompet') {
+        const ids = P.dompetDari(teks, S.ctxParser()).filter((id) => !p.pilihan || p.pilihan.indexOf(id) > -1);
+        if (ids.length === 1 && P.normal(teks).split(' ').length <= 4) return p.jawabDompet(ids[0]);
+      }
       Chat.antreKlar = [];
     }
     const it = P.analisis(teks, S.ctxParser());
@@ -357,6 +545,7 @@
   Chat.prosesIntent = async function (it, teks) {
     switch (it.type) {
       case 'transaksi': return Chat.catatDrafts(it.drafts, teks);
+      case 'saldo_set': return Chat.setSaldo(it.items, teks);
       case 'tanya': return Chat.jawabTanya(it);
       case 'unduh': return Chat.unduh(it);
       case 'batal': return Chat.batal(it.kata);
@@ -384,7 +573,9 @@
   const batchBaru = () => 'B' + Date.now().toString(36) + U.rand(3);
 
   Chat.catatDrafts = async function (drafts, teksAsli) {
-    const batch = batchBaru(), jelas = [], klar = [];
+    const batch = batchBaru(), jelas = [], klar = [], tanyaD = [];
+    const um = Chat.cari(Chat._ref);
+    if (um && um.from === 'me') { um.data.batch = batch; g.DB.put('chat', um); }
     const konfKecil = String(S.master.pengaturan.konfirmasi_nominal_kecil || 'ON') === 'ON';
     let pindahOff = false;
     drafts.forEach((d) => {
@@ -392,8 +583,13 @@
       if (d.tanpaNominal) klar.push({ type: 'harga', d });
       else if (d.nominalRagu && konfKecil) klar.push({ type: 'nominal', d });
       else if (d.jenis === 'PINDAH' && d.dompetRagu) klar.push({ type: 'dompet', d });
+      else if (Chat.perluDompet(d)) tanyaD.push(d);
       else jelas.push(d);
     });
+    // Dompet belum jelas → satu pertanyaan untuk semua transaksi dengan pilihan yang sama
+    const grup = {};
+    tanyaD.forEach((d) => { const kk = (d.dompetPilihan || []).join(',') || '*'; (grup[kk] = grup[kk] || []).push(d); });
+    Object.keys(grup).forEach((kk) => klar.push({ type: 'dompetBayar', ds: grup[kk], pilihan: kk === '*' ? null : kk.split(',') }));
     if (jelas.length) await Chat.simpanDrafts(jelas, teksAsli, batch);
     if (pindahOff) await Chat.sistem('Fitur dompet sedang dinonaktifkan Admin, jadi pindah saldo tidak dicatat.');
     Chat.antreKlar = klar.map((k) => Object.assign(k, { batch, teksAsli }));
@@ -455,14 +651,14 @@
     const d = k.d;
     if (k.type === 'harga') {
       await Chat.tambah({ kind: 'pilihan', data: { teks: 'Berapa harga ' + (d.keterangan || 'itu').toLowerCase() + 'nya?', sub: 'Ketik nominalnya saja, contoh: **25rb**' } });
-      Chat.pending = { type: 'harga', jawab: async (n) => { d.nominal = n; d.tanpaNominal = false; d.nominalRagu = false; await Chat.simpanDrafts([d], k.teksAsli, k.batch); return Chat.lanjutKlar(); } };
+      Chat.pending = { type: 'harga', jawab: async (n) => { d.nominal = n; d.tanpaNominal = false; d.nominalRagu = false; return Chat.selesaikanDraft(d, k); } };
       return;
     }
     if (k.type === 'nominal') {
       const besar = d.nominal * 1000;
       await Chat.tambah({ kind: 'pilihan', data: { teks: d.keterangan + ': maksudnya ' + U.rp(besar) + ' atau ' + U.rp(d.nominal) + '?', draft: d, batch: k.batch, teksAsli: k.teksAsli,
         chips: [{ label: U.rp(besar), aksi: 'nominal', nilai: { n: besar }, gaya: 'acc' }, { label: U.rp(d.nominal), aksi: 'nominal', nilai: { n: d.nominal } }] } });
-      Chat.pending = { type: 'nominal', jawab: async (n) => { d.nominal = n; d.nominalRagu = false; await Chat.simpanDrafts([d], k.teksAsli, k.batch); return Chat.lanjutKlar(); } };
+      Chat.pending = { type: 'nominal', jawab: async (n) => { d.nominal = n; d.nominalRagu = false; return Chat.selesaikanDraft(d, k); } };
       return;
     }
     if (k.type === 'dompet') {
@@ -472,7 +668,73 @@
       return Chat.tambah({ kind: 'pilihan', data: { teks: 'Pindah saldo ' + U.rp(d.nominal) + (sisi === 'tujuan' ? ' ke dompet mana?' : ' dari dompet mana?'), draft: d, batch: k.batch, teksAsli: k.teksAsli,
         chips: opsi.map((x) => ({ label: (x.ikon || '') + ' ' + x.nama, aksi: 'dompet', nilai: { sisi, id: x.id_dompet } })) } });
     }
+    if (k.type === 'dompetBayar') {
+      const ds = k.ds, masuk = ds.every((x) => x.jenis === 'MASUK');
+      const saldo = Object.fromEntries(S.saldoDompet().map((x) => [x.dompet.id_dompet, x.saldo]));
+      let opsi = S.dompetAktif().filter((x) => !k.pilihan || k.pilihan.indexOf(x.id_dompet) > -1);
+      if (!masuk && !k.pilihan) { const ada = opsi.filter((x) => (saldo[x.id_dompet] || 0) > 0); if (ada.length) opsi = ada; }  // hanya yang ada saldonya
+      opsi.sort((a, b) => (saldo[b.id_dompet] || 0) - (saldo[a.id_dompet] || 0));
+      const total = ds.reduce((a, x) => a + x.nominal, 0);
+      const apa = ds.length > 1 ? ds.length + ' transaksi (' + U.rp(total) + ')' : ds[0].keterangan + ' ' + U.rp(total);
+      const m = await Chat.tambah({ kind: 'pilihan', data: {
+        teks: apa + (masuk ? ' masuk ke mana?' : ' dibayar pakai apa?'), sub: 'Atau ketik, misalnya: **tunai**, **rek**, **gopay**',
+        drafts: ds, batch: k.batch, teksAsli: k.teksAsli,
+        chips: opsi.map((x) => ({ label: (x.ikon || '') + ' ' + x.nama + ' \u00b7 ' + (saldo[x.id_dompet] < 0 ? '\u2212' : '') + U.rp(saldo[x.id_dompet] || 0), aksi: 'dompetBayar', nilai: { id: x.id_dompet } }))
+      } });
+      Chat.pending = { type: 'dompetBayar', pilihan: opsi.map((x) => x.id_dompet), jawabDompet: async (id) => {
+        const i = m.data.chips.findIndex((c) => c.nilai.id === id);
+        return Chat.aksi(m, m.data.chips[i] || { aksi: 'dompetBayar', nilai: { id } }, i);
+      } };
+      return null;
+    }
+    if (k.type === 'saldoDompet') {
+      const it = k.it;
+      const saldo = Object.fromEntries(S.saldoDompet().map((x) => [x.dompet.id_dompet, x.saldo]));
+      const opsi = S.dompetAktif().filter((x) => !it.pilihan || it.pilihan.indexOf(x.id_dompet) > -1);
+      const m = await Chat.tambah({ kind: 'pilihan', data: {
+        teks: 'Saldo ' + U.rp(it.nominal) + ' ini untuk dompet mana?', sub: 'Saldo di aplikasi akan disesuaikan menjadi ' + U.rp(it.nominal) + '.',
+        it, batch: k.batch, teksAsli: k.teksAsli,
+        chips: opsi.map((x) => ({ label: (x.ikon || '') + ' ' + x.nama + ' \u00b7 ' + (saldo[x.id_dompet] < 0 ? '\u2212' : '') + U.rp(saldo[x.id_dompet] || 0), aksi: 'saldoDompet', nilai: { id: x.id_dompet } }))
+      } });
+      Chat.pending = { type: 'saldoDompet', pilihan: opsi.map((x) => x.id_dompet), jawabDompet: async (id) => {
+        const i = m.data.chips.findIndex((c) => c.nilai.id === id);
+        return Chat.aksi(m, m.data.chips[i] || { aksi: 'saldoDompet', nilai: { id } }, i);
+      } };
+      return null;
+    }
     return null;
+  };
+
+  /** Draft yang dompetnya belum jelas: default "Tanya dulu" atau nama yang dipakai lebih dari satu dompet */
+  Chat.perluDompet = (d) => d.jenis !== 'PINDAH' && S.fiturDompet() && !d.id_dompet && (d.tanyaDompet || (d.dompetPilihan && d.dompetPilihan.length > 1));
+  Chat.selesaikanDraft = async function (d, k) {
+    if (Chat.perluDompet(d)) Chat.antreKlar.unshift({ type: 'dompetBayar', ds: [d], pilihan: d.dompetPilihan || null, batch: k.batch, teksAsli: k.teksAsli });
+    else await Chat.simpanDrafts([d], k.teksAsli, k.batch);
+    return Chat.lanjutKlar();
+  };
+
+  // ---------- Penyesuaian saldo ("saldo bank sekarang 5jt") ----------
+  Chat.setSaldo = async function (items, teksAsli) {
+    if (!S.fiturDompet()) return Chat.sistem('Fitur dompet sedang dinonaktifkan Admin, jadi saldo per dompet tidak dicatat.');
+    const batch = batchBaru();
+    const um = Chat.cari(Chat._ref);
+    if (um && um.from === 'me') { um.data.batch = batch; g.DB.put('chat', um); }
+    const klar = [];
+    for (const it of items) {
+      if (it.id_dompet) await Chat.terapkanSaldo(it.id_dompet, it.nominal, teksAsli, batch);
+      else klar.push({ type: 'saldoDompet', it, batch, teksAsli });
+    }
+    Chat.antreKlar = klar;
+    return Chat.lanjutKlar();
+  };
+  Chat.terapkanSaldo = async function (id, target, teksAsli, batch) {
+    const d = S.dompet(id);
+    if (!d) return Chat.sistem('Dompet tidak ditemukan.');
+    const cur = (S.saldoDompet().find((x) => x.dompet.id_dompet === id) || { saldo: 0 }).saldo;
+    const selisih = target - cur;
+    if (!selisih) return Chat.sistem('Saldo **' + d.nama + '** sudah ' + U.rp(target) + ', tidak ada yang diubah.');
+    const t = await S.simpanTx({ jenis: 'SALDO', nominal: selisih, keterangan: 'Saldo jadi ' + U.rp(target), id_dompet: id, tanggal_transaksi: U.hariIni(), teks_asli: teksAsli, id_batch: batch, sumber: 'CHAT' });
+    return Chat.tambah({ kind: 'tx', data: { ids: [t.id_transaksi], saldo: { dari: cur, ke: target, dompet: d.nama } } });
   };
 
   // ---------- Batal ----------
@@ -490,7 +752,7 @@
     if (!target.length) return Chat.sistem(kata ? 'Tidak ada transaksi “' + kata + '” milikmu yang bisa dibatalkan.' : 'Belum ada transaksi milikmu yang bisa dibatalkan.');
     return Chat.tambah({ kind: 'ringkasan', data: {
       judul: target.length > 1 ? 'Batalkan pesan terakhir?' : 'Batalkan transaksi ini?',
-      baris: target.map((t) => ({ l: (t.jenis === 'PINDAH' ? '🔄 Pindah saldo ' + S.namaDompet(t.id_dompet) + ' → ' + S.namaDompet(t.id_dompet_tujuan) : S.kat(t.id_kategori).ikon + ' ' + t.keterangan), v: U.rpTanda(t.nominal, t.jenis), kelas: t.jenis === 'MASUK' ? 't-in' : t.jenis === 'PINDAH' ? 't-tr' : 't-out' })),
+      baris: target.map((t) => ({ l: S.ikonTx(t) + ' ' + S.judulTx(t) + (t.jenis === 'PINDAH' ? ' ' + S.namaDompet(t.id_dompet) + ' → ' + S.namaDompet(t.id_dompet_tujuan) : t.jenis === 'SALDO' ? ' ' + S.namaDompet(t.id_dompet) : ''), v: U.rpTanda(t.nominal, t.jenis), kelas: S.kelasJenis(t.jenis) })),
       chips: [{ label: 'Ya, batalkan', aksi: 'batalYa', nilai: { ids: target.map((t) => t.id_transaksi) }, gaya: 'danger' }, { label: 'Tidak', aksi: 'tutup' }]
     } });
   };
@@ -562,7 +824,7 @@
         .sort((a, b) => String(b.waktu_catat).localeCompare(String(a.waktu_catat)));
       return Chat.tambah({ kind: 'ringkasan', data: { judul: '🗓️ ' + per.label + namaOrang, total: U.rp(r.keluar), kelasTotal: 't-out',
         caption: 'Pengeluaran ' + U.rp(r.keluar) + ' · Pemasukan ' + U.rp(r.masuk),
-        baris: list.slice(0, 10).map((t) => ({ l: (t.jenis === 'PINDAH' ? '🔄 Pindah saldo' : S.kat(t.id_kategori).ikon + ' ' + t.keterangan) + (S.lihatSemua() && t.id_pengguna !== S.saya.id ? ' · ' + S.orang(t.id_pengguna).nama : ''), v: U.rpTanda(t.nominal, t.jenis), kelas: t.jenis === 'MASUK' ? 't-in' : t.jenis === 'PINDAH' ? 't-tr' : 't-out' })),
+        baris: list.slice(0, 10).map((t) => ({ l: (S.ikonTx(t) + ' ' + S.judulTx(t)) + (S.lihatSemua() && t.id_pengguna !== S.saya.id ? ' · ' + S.orang(t.id_pengguna).nama : ''), v: U.rpTanda(t.nominal, t.jenis), kelas: S.kelasJenis(t.jenis) })),
         catatan: (list.length > 10 ? '+' + (list.length - 10) + ' transaksi lain di Riwayat. ' : list.length ? '' : 'Belum ada transaksi. ') + kor,
         chips: list.length > 10 ? [{ label: 'Buka Riwayat', aksi: 'buka', nilai: { halaman: 'riwayat' }, tetap: true }] : [] } });
     }

@@ -142,7 +142,7 @@
     terapkan() {
       const root = document.documentElement;
       root.dataset.theme = Tema.gelap() ? 'dark' : 'light';
-      const warna = (g.S && g.S.master && g.S.master.pengaturan && g.S.master.pengaturan.warna_utama) || (function () { try { return localStorage.getItem('cashku:warna'); } catch (e) { return null; } })() || '#25D366';
+      const warna = (g.S && g.S._warnaSementara) || (g.S && g.S.master && g.S.master.pengaturan && g.S.master.pengaturan.warna_utama) || (function () { try { return localStorage.getItem('cashku:warna'); } catch (e) { return null; } })() || '#25D366';
       try { localStorage.setItem('cashku:warna', warna); } catch (e) {}
       const t = U.temaDari(warna);
       root.style.setProperty('--accent', t.accent);
@@ -151,6 +151,9 @@
       root.style.setProperty('--on-accent', t.onAccent);
       root.style.setProperty('--tint', Tema.gelap() ? U.alpha(t.accent, 0.16) : U.alpha(t.primary, 0.1));
       root.style.setProperty('--tint-text', Tema.gelap() ? t.accent : t.primary);
+      // Gelembung chat milik pengguna ikut warna tema (terang: tint accent; gelap: primary diredupkan)
+      root.style.setProperty('--me', t.accent === '#25D366' ? (Tema.gelap() ? '#005C4B' : '#D9FDD3') : Tema.gelap() ? U.campur(t.primary, '#0B141A', 0.35) : U.campur(t.accent, '#FFFFFF', 0.8));
+      root.style.setProperty('--focus-ring', U.alpha(t.accent, 0.15));
       const meta = U.$('meta[name="theme-color"]');
       if (meta) meta.setAttribute('content', Tema.gelap() ? '#202C33' : t.primary);
     }

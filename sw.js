@@ -2,7 +2,7 @@
 /* global importScripts, self, caches, indexedDB, clients */
 importScripts('js/config.js');
 
-const VERSI = 'cashku-1.0.0';
+const VERSI = 'cashku-1.0.2';
 const ASET = [
   './', 'index.html', 'manifest.webmanifest', 'css/style.css',
   'js/config.js', 'js/icons.js', 'js/util.js', 'js/db.js', 'js/api.js', 'js/state.js', 'js/parser.js', 'js/sync.js',
@@ -36,7 +36,7 @@ self.addEventListener('fetch', (e) => {
   // Halaman: tampilkan dari cache (instan & offline), perbarui di latar
   if (req.mode === 'navigate') {
     e.respondWith(caches.match('index.html').then((c) => {
-      const net = fetch(req).then((r) => { if (r.ok) caches.open(VERSI).then((ca) => ca.put('index.html', r.clone())); return r; }).catch(() => c);
+      const net = fetch(req).then((r) => { if (r.ok) { const cp = r.clone(); caches.open(VERSI).then((ca) => ca.put('index.html', cp)); } return r; }).catch(() => c);
       return c || net;
     }));
     return;
