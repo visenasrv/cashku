@@ -129,7 +129,9 @@ git add .
 git commit -m "Perbarui CashKu"
 git push
 ```
-Perubahan terpakai saat aplikasi dibuka berikutnya (buka-tutup sekali lagi bila belum terlihat).
+Setelah 1–2 menit, buka CashKu: muncul banner **"Versi baru tersedia"** → ketuk **Muat ulang**. Bila banner belum muncul, tutup aplikasi sepenuhnya lalu buka lagi.
+
+Bila suatu halaman menampilkan **"Halaman ini gagal dimuat"**, ketuk **Perbaiki & muat ulang**. Berkas aplikasi di HP diunduh ulang; data dan login tetap aman.
 
 ---
 

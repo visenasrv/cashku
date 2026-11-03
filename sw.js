@@ -2,7 +2,7 @@
 /* global importScripts, self, caches, indexedDB, clients */
 importScripts('js/config.js');
 
-const VERSI = 'cashku-1.0.2';
+const VERSI = 'cashku-1.0.3';
 const ASET = [
   './', 'index.html', 'manifest.webmanifest', 'css/style.css',
   'js/config.js', 'js/icons.js', 'js/util.js', 'js/db.js', 'js/api.js', 'js/state.js', 'js/parser.js', 'js/sync.js',
@@ -33,27 +33,14 @@ self.addEventListener('fetch', (e) => {
     e.respondWith(jaringanDulu(req, 3000));
     return;
   }
-  // Halaman: tampilkan dari cache (instan & offline), perbarui di latar
-  if (req.mode === 'navigate') {
-    e.respondWith(caches.match('index.html').then((c) => {
-      const net = fetch(req).then((r) => { if (r.ok) { const cp = r.clone(); caches.open(VERSI).then((ca) => ca.put('index.html', cp)); } return r; }).catch(() => c);
-      return c || net;
-    }));
-    return;
-  }
-  // Kode aplikasi (js/css): tampil dari cache, diperbarui di latar → push baru ke GitHub terpakai pada pembukaan berikutnya
-  if (/\/(js|css)\/[^/]+$/.test(url.pathname) && !/\/js\/vendor\//.test(url.pathname)) {
-    e.respondWith(caches.match(req, { ignoreSearch: true }).then((c) => {
-      const net = fetch(req, { cache: 'no-cache' }).then((r) => { if (r.ok) { const cp = r.clone(); caches.open(VERSI).then((ca) => ca.put(req, cp)); } return r; }).catch(() => c);
-      return c || net;
-    }));
-    return;
-  }
-  // Aset tetap (font, ikon, pustaka PDF): cache dulu
-  e.respondWith(caches.match(req, { ignoreSearch: true }).then((c) => c || fetch(req).then((r) => {
-    if (r.ok && r.type === 'basic') { const cp = r.clone(); caches.open(VERSI).then((ca) => ca.put(req, cp)); }
+  // Semua berkas aplikasi diambil HANYA dari cache versi ini (diisi lengkap saat pemasangan).
+  // Dengan begitu berkas versi lama & baru tidak pernah tercampur. Versi baru datang lewat sw.js baru
+  // (VERSI dinaikkan) → banner "Versi baru tersedia" → Muat ulang.
+  const kunci = req.mode === 'navigate' ? 'index.html' : req;
+  e.respondWith(caches.open(VERSI).then((ca) => ca.match(kunci, { ignoreSearch: true }).then((c) => c || fetch(req, { cache: 'no-cache' }).then((r) => {
+    if (r.ok && r.type === 'basic') ca.put(kunci, r.clone());
     return r;
-  })));
+  }).catch(() => (req.mode === 'navigate' ? ca.match('./') : Response.error())))));
 });
 
 function jaringanDulu(req, ms) {

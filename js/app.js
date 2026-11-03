@@ -20,7 +20,7 @@
         '<button class="btn block lg" style="margin-top:24px" data-masuk>Masuk</button>' +
         '<p class="muted small" style="text-align:center;margin:16px 0 0">Lupa password? <span class="link">Hubungi Admin keluarga</span></p>' +
         '<div class="hr" style="margin:24px 0"></div><button type="button" class="btn block soft" data-pasang>' + ic('download') + 'Pasang CashKu di HP</button>' +
-        '<div class="ver">CashKu v' + U.esc(g.CASHKU_CONFIG.VERSI) + '</div></form></div>';
+        '<div class="ver">CashKu v' + U.esc(U.VERSI) + '</div></form></div>';
     },
     init(el) {
       const f = el.querySelector('[data-form]');
@@ -162,6 +162,12 @@
       // Muat ulang hanya saat pengguna menekan "Muat ulang" (bukan saat pemasangan pertama)
       let muatUlang = false;
       navigator.serviceWorker.addEventListener('controllerchange', () => { if (muatUlang || !App._mauPerbarui) return; muatUlang = true; location.reload(); });
+    },
+    async muatUlangBersih() {
+      try { if (S.outbox.size && navigator.onLine !== false) await Promise.race([g.Sync.sekarang(), new Promise((r) => setTimeout(r, 5000))]); } catch (e) {}
+      try { if (g.caches) { const ks = await caches.keys(); await Promise.all(ks.map((k) => caches.delete(k))); } } catch (e) {}
+      try { const reg = navigator.serviceWorker && (await navigator.serviceWorker.getRegistration()); if (reg) { await reg.update().catch(() => {}); if (reg.waiting) { App._mauPerbarui = true; reg.waiting.postMessage({ type: 'SKIP_WAITING' }); setTimeout(() => location.reload(), 1500); return; } } } catch (e) {}
+      location.reload();
     },
     tawarkanPembaruan(reg) {
       if (document.querySelector('.update-bar')) return;

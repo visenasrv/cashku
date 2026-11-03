@@ -27,4 +27,6 @@ fonts/, icons/          Plus Jakarta Sans & ikon aplikasi
 
 ## Pembaruan
 
-Ubah berkas → `git add . && git commit -m "..." && git push`. Untuk rilis besar, naikkan `VERSI` di `sw.js` agar pengguna mendapat tombol "Versi baru tersedia".
+Ubah berkas → **naikkan `VERSI` di `sw.js`** (dan `U.VERSI` di `js/util.js`) → `git add . && git commit -m "..." && git push`.
+
+Aplikasi di HP menyimpan satu set berkas per versi, sehingga berkas lama dan baru tidak pernah tercampur. Tanpa menaikkan `VERSI`, perubahan tidak sampai ke HP pengguna. Setelah push, pengguna melihat banner **"Versi baru tersedia" → Muat ulang**. Pengecualian: `js/config.js` selalu diambil terbaru dari server.

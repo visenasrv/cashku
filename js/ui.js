@@ -101,28 +101,46 @@
       if (def.izin && !def.izin()) { Router.go('chat', null, { ganti: true }); return; }
       Sheet.tutupSemua();
       let el = Router.root.querySelector('.page[data-page="' + name + '"]');
+      if (el && el.dataset.rusak) { el.remove(); el = null; }
       if (!el) {
         el = document.createElement('section');
         el.className = 'page' + (def.kelas ? ' ' + def.kelas : '');
         el.dataset.page = name;
         el.innerHTML = def.template();
         Router.root.appendChild(el);
-        if (def.init) def.init(el);
+        if (def.init) { try { def.init(el); } catch (err) { Router.gagal(el, err); } }
       }
       U.$$('.page', Router.root).forEach((p) => { p.hidden = p !== el; });
       const sebelum = Router.saatIni;
       Router.saatIni = name;
       if (Router.riwayat[Router.riwayat.length - 2] === name) Router.riwayat.pop(); else Router.riwayat.push(name);
-      if (def.show) def.show(el, param ? decodeURIComponent(param) : '', sebelum);
+      if (def.show && !el.dataset.rusak) Router.aman(el, () => def.show(el, param ? decodeURIComponent(param) : '', sebelum));
       if (name !== 'chat') window.scrollTo(0, 0);
       el.dataset.kotor = '';
+    },
+    /** Jalankan render halaman; bila gagal, tampilkan pesan (bukan layar kosong) */
+    aman(el, fn) {
+      try { const r = fn(); if (r && r.catch) r.catch((err) => Router.gagal(el, err)); } catch (err) { Router.gagal(el, err); }
+    },
+    gagal(el, err) {
+      console.error('Halaman gagal dimuat:', err);
+      el.dataset.rusak = '1';
+      const body = el.querySelector('[data-body]'), box = body || el;
+      if (body) body.innerHTML = ''; else { const old = el.querySelector('.page-err'); if (old) old.remove(); }
+      const kartu = U.el('<div class="card page-err" style="margin:16px;text-align:center">' +
+        '<p style="margin:0 0 6px;font-weight:600">Halaman ini gagal dimuat</p>' +
+        '<p class="small muted" style="margin:0 0 14px">Biasanya karena berkas aplikasi di perangkat ini belum lengkap setelah pembaruan. Data Anda aman.</p>' +
+        '<button class="btn block" data-perbaiki>Perbaiki & muat ulang</button>' +
+        '<p class="small muted" style="margin:12px 0 0;word-break:break-word;opacity:.7">' + U.esc(String((err && err.message) || err)) + '</p></div>');
+      kartu.querySelector('[data-perbaiki]').onclick = () => (g.App && g.App.muatUlangBersih ? g.App.muatUlangBersih() : location.reload());
+      box.appendChild(kartu);
     },
     /** Tandai halaman perlu render ulang; yang sedang tampil langsung dirender */
     segarkan() {
       U.$$('.page', Router.root).forEach((p) => {
         const def = Pages[p.dataset.page];
         if (!def || !def.show) return;
-        if (!p.hidden) { if (def.segarkan) def.segarkan(p); else def.show(p, '', Router.saatIni); }
+        if (!p.hidden) Router.aman(p, () => (def.segarkan ? def.segarkan(p) : def.show(p, '', Router.saatIni)));
         else p.dataset.kotor = '1';
       });
     }

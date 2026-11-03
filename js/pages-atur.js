@@ -82,6 +82,7 @@
   }
   function render(el) {
     const s = S.saya, warna = String(S._warnaSementara || S.master.pengaturan.warna_utama || '#25D366').toUpperCase();
+    const L = g.Chat && g.Chat.Latar;
     const usulan = S.master.usulan.filter((u) => u.status === 'MENUNGGU').length;
     const st = g.Sync.status, antre = Array.from(S.outbox.values()).filter((o) => o.type === 'tx.put').length;
     const row = (go, ikon, judul, kanan, extra) => '<button class="list-row" ' + go + '><span class="ico-c sm">' + ic(ikon, 'ic-sm') + '</span><span class="grow" style="font-weight:500">' + judul + '</span>' + (kanan || '') + (extra === false ? '' : ic('chevron-right', 'chev')) + '</button>';
@@ -99,11 +100,11 @@
         : '<p class="small muted" style="margin:10px 0 0;display:flex;gap:6px;align-items:center">' + ic('lock', 'ic-sm') + 'Hanya Admin yang dapat mengubah warna</p>') +
       '<div class="hr"></div><div class="row" style="margin-bottom:10px"><span class="ico-c sm">' + ic('moon', 'ic-sm') + '</span><b style="font-weight:500">Mode tampilan</b></div>' +
       '<div class="seg" data-tema>' + [['TERANG', 'Terang'], ['GELAP', 'Gelap'], ['OTOMATIS', 'Otomatis']].map((m) => '<button data-v="' + m[0] + '" class="' + (UI.Tema.mode() === m[0] ? 'on' : '') + '">' + m[1] + '</button>').join('') + '</div>' +
-      '<div class="hr"></div><div class="row" style="margin-bottom:10px"><span class="ico-c sm">' + ic('image', 'ic-sm') + '</span><b style="font-weight:500">Latar chat</b></div>' +
-      '<div class="row" style="align-items:flex-start"><div class="latar-prev' + (g.Chat.Latar.url ? ' ada' : '') + '"' + (g.Chat.Latar.url ? ' style="background-image:url(' + g.Chat.Latar.url + ')"' : '') + '></div>' +
+      (L ? '<div class="hr"></div><div class="row" style="margin-bottom:10px"><span class="ico-c sm">' + ic('image', 'ic-sm') + '</span><b style="font-weight:500">Latar chat</b></div>' +
+      '<div class="row" style="align-items:flex-start"><div class="latar-prev' + (L.url ? ' ada' : '') + '"' + (L.url ? ' style="background-image:url(' + L.url + ')"' : '') + '></div>' +
       '<div class="grow"><div class="row" style="gap:8px;flex-wrap:wrap"><label class="btn sm soft" data-latar-pilih>' + ic('image-plus', 'ic-sm') + 'Pilih dari galeri<input type="file" accept="image/*" data-latar-file hidden></label>' +
-      (g.Chat.Latar.url ? '<button class="btn sm ghost" data-latar-hapus>Pakai bawaan</button>' : '') + '</div>' +
-      '<p class="small muted" style="margin:8px 0 0">Gambar hanya tersimpan di HP ini, tidak dikirim ke server atau database.</p></div></div></div>';
+      (L.url ? '<button class="btn sm ghost" data-latar-hapus>Pakai bawaan</button>' : '') + '</div>' +
+      '<p class="small muted" style="margin:8px 0 0">Gambar hanya tersimpan di HP ini, tidak dikirim ke server atau database.</p></div></div>' : '') + '</div>';
 
     if (S.isAdmin() || S.fiturDompet()) {
       h += '<div class="sec">Dompet</div><div class="list-group">';
@@ -123,7 +124,7 @@
       row('data-sinkron', st === 'offline' ? 'cloud-off' : 'refresh-cw', 'Sinkron sekarang', '<span class="small muted">' + (antre ? antre + ' belum terkirim' : U.relatif(S.meta.lastSync)) + '</span>', false) +
       (g.App.bisaPasang() ? row('data-pasang', 'smartphone', 'Pasang CashKu di HP', '') : '') +
       '<button class="list-row" data-keluar style="color:var(--expense)"><span class="ico-c sm" style="background:var(--danger-bg);color:var(--expense)">' + ic('log-out', 'ic-sm') + '</span><span class="grow" style="font-weight:600">Keluar</span></button></div>' +
-      '<p class="small muted" style="text-align:center;margin-top:20px;display:flex;justify-content:center;gap:6px;align-items:center">' + ic('cloud', 'ic-sm') + 'CashKu v' + U.esc(g.CASHKU_CONFIG.VERSI) + ' · Data tersimpan di Google Sheets keluarga</p>';
+      '<p class="small muted" style="text-align:center;margin-top:20px;display:flex;justify-content:center;gap:6px;align-items:center">' + ic('cloud', 'ic-sm') + 'CashKu v' + U.esc(U.VERSI) + ' · Data tersimpan di Google Sheets keluarga</p>';
     el.querySelector('[data-body]').innerHTML = h;
   }
 
