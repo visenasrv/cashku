@@ -293,6 +293,7 @@ textarea.input { height: auto; min-height: 96px; padding: 12px 14px; resize: ver
 .bub p { margin: 0 0 6px; } .bub p:last-child { margin-bottom: 0; }
 .bub .bhead { display: flex; align-items: center; gap: 6px; color: var(--primary); font-weight: 600; font-size: 13px; margin: 2px 0 6px; }
 :root[data-theme="dark"] .bub .bhead { color: var(--accent); }
+.bub p.salam { margin: 0 0 6px; font-size: 14.5px; }
 .bub .chips { margin-top: 10px; }
 .bub .div { height: 1px; background: var(--line); margin: 10px -12px; }
 .tx-row { display: flex; gap: 10px; align-items: flex-start; padding: 8px 0; }

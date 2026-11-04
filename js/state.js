@@ -103,8 +103,21 @@
       versi: S.meta.verMaster + ':' + S.master.kamus.length + ':' + S.master.kategori.length + ':' + S.master.dompet.length,
       kategori: S.master.kategori, kamus: S.master.kamus, dompet: S.dompetAktif(), anggota: S.master.anggota,
       saya: S.saya, fiturDompet: S.fiturDompet(), hariIni: U.hariIni(),
-      kategoriDefaultKeluar: S.kategoriDefault('KELUAR'), kategoriDefaultMasuk: S.kategoriDefault('MASUK')
+      kategoriDefaultKeluar: S.kategoriDefault('KELUAR'), kategoriDefaultMasuk: S.kategoriDefault('MASUK'),
+      riwayat: S.riwayatKata
     };
+  };
+  /** Riwayat nominal per kategori untuk transaksi yang keterangannya memuat kata ini (dipakai untuk menebak kata bermakna ganda) */
+  S.riwayatKata = function (kata) {
+    const P = g.Parser, k = P.normal(kata);
+    if (!k) return [];
+    const re = new RegExp('(^|[^a-z0-9])' + k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '($|[^a-z0-9])');
+    const out = [];
+    S.tx.forEach((t) => {
+      if (t.status !== 'AKTIF' || (t.jenis !== 'KELUAR' && t.jenis !== 'MASUK') || !t.id_kategori || !(t.nominal > 0)) return;
+      if (re.test(P.normal(t.keterangan))) out.push({ kat: t.id_kategori, nominal: t.nominal });
+    });
+    return out;
   };
 
   // ---------- Status sinkron per transaksi ----------

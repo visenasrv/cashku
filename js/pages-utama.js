@@ -283,9 +283,11 @@
         UI.Toast.show('Perubahan disimpan', 'success', navigator.onLine === false ? 'Akan dikirim saat online.' : '');
         // Belajar dari koreksi kategori lewat tombol Ubah di chat
         if (opt.dariChat && st.jenis !== 'PINDAH' && st.kat !== katLama) {
-          const frasa = g.Parser.normal(ket).split(' ').slice(0, 3).join(' ');
-          const sudah = S.master.kamus.some((k) => k.frasa === frasa && k.target === st.kat);
-          if (frasa && !sudah) g.Chat.setelahPilihKategori(t.id_transaksi, st.kat, frasa);
+          // Frasa dari teks aslinya ("beli air" untuk kata bermakna ganda), bukan hanya keterangannya
+          const fi = g.Parser.frasaIngat(t.teks_asli, ket, S.ctxParser());
+          const frasa = g.Parser.kataUmum(fi.frasa) ? '' : fi.frasa;
+          const sudah = frasa && S.master.kamus.some((k) => g.Parser.normal(k.frasa) === frasa && k.target === st.kat);
+          if (!sudah && (frasa || fi.ganda)) g.Chat.setelahPilihKategori(t.id_transaksi, st.kat, frasa, { ganda: fi.ganda });
         }
       };
       el.querySelector('[data-hapus]').onclick = async () => {

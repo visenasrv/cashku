@@ -120,6 +120,12 @@ Claude akan memandu tahap ini satu per satu di percakapan.
 | `checkout shopee 150rb` · `beli baju di lazada 120rb` · `ongkir 15rb` | Kategori **Belanja Online** |
 | `bayar qris 25rb` | CashKu bertanya: dari Rekening atau E-Wallet (yang ada saldonya; bila hanya satu, langsung dipakai) |
 | `unduh laporan bulan ini` · `laporan maret 2026` · `laporan tahun 2025` | Kartu laporan + tombol Unduh PDF |
+| `bayar air 500rb` · `beli air 10rb` · `air galon 20rb` · `air 10rb` | Kata bermakna ganda: CashKu melihat kata pendamping, kata kerja, nominal, dan kebiasaan Anda. **Bayar** air → Tagihan, **beli** air / galon → Kebutuhan Bulanan. Bila masih ragu, CashKu bertanya *“Air yang mana nih?”* (boleh diketuk atau diketik, misalnya `galon`) |
+| `obat nyamuk 15rb` · `servis ac 250rb` · `token ml 50rb` · `susu anak 120rb` · `iuran sekolah 100rb` | Kata ganda lain (obat, servis, token, minyak, kopi, susu, paket, iuran, tiket, sewa, pajak, pulsa, ongkos, buku) masuk kategori sesuai konteksnya |
+| `ingat air depot masuk kebutuhan bulanan` · `kalau air galon masuk ke bulanan ya` · `air minum itu kategori bulanan` | Mengajari CashKu langsung → *“Siap, aku ingat!”* (ada tombol **Urungkan**) |
+| `lupakan kata air` · `kopi itu termasuk apa?` | Menghapus ingatan kata · menanyakan kata itu masuk kategori apa |
+| `bensin 2jt` (biasanya 25rb) | CashKu memastikan dulu: *“Biasanya cuma sekitar Rp25.000 lho, sudah benar?”* |
+| `halo` · `selamat pagi` · `makasih` · `kamu siapa?` · `ok` | Dibalas santai seperti asisten pribadi, dengan bahasa netral (tanpa ungkapan keagamaan) |
 | `batal` | Membatalkan pesan transaksi terakhir |
 | `bantuan` | Daftar contoh |
 | **Tekan lama** sebuah pesan → *Hapus pesan* | Pesan dihapus dan transaksinya ikut dibatalkan |
@@ -134,6 +140,8 @@ Claude akan memandu tahap ini satu per satu di percakapan.
 
 ## Memperbarui aplikasi
 
+> **Pembaruan 1.0.11 (CashKu lebih pintar & santai)** hanya mengubah **tampilan** — `Kode.gs` **tidak perlu** ditempel ulang. Unggah ulang tampilan ke GitHub (langkah di bawah). Kata yang dulu sudah diingat (misalnya “air” → Tagihan) tetap dipakai, tetapi sekarang hanya sebagai salah satu petunjuk: `beli air 10rb` otomatis masuk Kebutuhan Bulanan. Saat Anda mengoreksi kategori, CashKu mengingat frasa lengkapnya (misalnya “beli air”), bukan satu kata saja.
+>
 > **Pembaruan 1.0.8 (Tabungan, Hobi, pindah saldo fleksibel, "belanja" umum)** mengubah **server dan tampilan**: tempel ulang `Kode.gs` lalu buat *Versi baru*. Dompet **Tabungan**, kategori **Hobi**, dan perubahan kata "belanja" otomatis ditambahkan ke database lama saat aplikasi sinkron (atau jalankan `migrasiData` sekali). Dompet Tabungan bisa dimatikan di **Pengaturan → Kelola dompet → Tabungan → Aktif**.
 >
 > **Pembaruan 1.0.5 (pertanyaan terbesar & rata-rata, Belanja Online, QRIS)** mengubah **server dan tampilan**: tempel ulang `Kode.gs` lalu buat *Versi baru*. Kategori **Belanja Online** dan kata kuncinya otomatis ditambahkan ke database lama saat aplikasi pertama kali sinkron (atau jalankan fungsi `migrasiData` sekali dari editor). Lalu unggah ulang tampilan.
