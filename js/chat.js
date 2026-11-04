@@ -381,8 +381,21 @@
         if (d.jenis === 'PINDAH' && d.dompetRagu) { Chat.antreKlar.unshift({ type: 'dompet', d, batch: m.data.batch, teksAsli: m.data.teksAsli }); return Chat.lanjutKlar(); }
         return Chat.selesaikanDraft(d, { batch: m.data.batch, teksAsli: m.data.teksAsli });
       }
+      case 'jenisMasuk': {
+        await tandai(m, i);
+        if (Chat.pending && Chat.pending.type === 'jenisMasuk') Chat.pending = null;
+        const d = m.data.draft;
+        d.tanyaJenis = false;
+        if (v.dari) {
+          d.jenis = 'PINDAH'; d.id_dompet_tujuan = d.id_dompet; d.id_dompet = v.dari; d.id_kategori = ''; d.keterangan = 'Pindah saldo'; d.dompetRagu = false;
+          await Chat.simpanDrafts([d], m.data.teksAsli, m.data.batch);
+          return Chat.lanjutKlar();
+        }
+        return Chat.selesaikanDraft(Chat.jadiPemasukan(d), { batch: m.data.batch, teksAsli: m.data.teksAsli });
+      }
       case 'dompet': {
         await tandai(m, i);
+        if (Chat.pending && Chat.pending.type === 'dompetPindah') Chat.pending = null;
         const d = m.data.draft;
         if (v.sisi === 'tujuan') d.id_dompet_tujuan = v.id; else d.id_dompet = v.id;
         d.dompetRagu = !d.id_dompet || !d.id_dompet_tujuan || d.id_dompet === d.id_dompet_tujuan;
@@ -538,16 +551,20 @@
       const n = P.nominalSaja(teks);
       Chat.pending = null;
       if (n && (p.type === 'harga' || p.type === 'nominal')) return p.jawab(n);
-      if (p.type === 'dompetBayar' || p.type === 'saldoDompet') {
+      if (p.type === 'jenisMasuk' && /\b(pemasukan|pendapatan|penghasilan|gaji|bonus|uang baru|rejeki|rezeki|income|dikasih|hadiah)\b/.test(P.normal(teks)) && P.normal(teks).split(' ').length <= 4) return p.jawabMasuk();
+      if (p.type === 'dompetBayar' || p.type === 'saldoDompet' || p.type === 'dompetPindah' || p.type === 'jenisMasuk') {
         const semuaIds = P.dompetDari(teks, S.ctxParser());
         const ids = semuaIds.filter((id) => !p.pilihan || p.pilihan.indexOf(id) > -1);
         const pendek = P.normal(teks).split(' ').length <= 4;
         if (ids.length === 1 && pendek) return p.jawabDompet(ids[0]);
-        if (p.type === 'dompetBayar' && !ids.length && semuaIds.length && pendek && !P.nominalSaja(teks)) {
+        const sd0 = semuaIds.length === 1 ? S.saldoDompet().find((x) => x.dompet.id_dompet === semuaIds[0]) : null;
+        // Tabungan tidak ditawarkan, tetapi boleh dipakai bila disebut langsung ("tabungan")
+        if (p.type !== 'saldoDompet' && sd0 && sd0.dompet.tipe === 'TABUNGAN' && sd0.saldo > 0 && pendek && !p.terkunci) return p.jawabDompet(semuaIds[0]);
+        if (p.type !== 'saldoDompet' && !ids.length && semuaIds.length && pendek && !P.nominalSaja(teks)) {
           Chat.pending = p;
           const sd = S.saldoDompet().find((x) => x.dompet.id_dompet === semuaIds[0]);
           return Chat.sistem(sd && sd.saldo <= 0
-            ? 'Saldo **' + sd.dompet.nama + '** ' + (sd.saldo < 0 ? '\u2212' : '') + U.rp(sd.saldo) + ', jadi tidak bisa dipakai membayar. Pilih dompet di atas, atau catat saldonya dulu.'
+            ? 'Saldo **' + sd.dompet.nama + '** ' + (sd.saldo < 0 ? '\u2212' : '') + U.rp(sd.saldo) + ', jadi tidak bisa dipakai' + (p.type === 'dompetBayar' ? ' membayar' : '') + '. Pilih dompet di atas, atau catat saldonya dulu.'
             : 'Pilih salah satu dompet di atas, ya.');
         }
         if (ids.length > 1 && pendek && !P.nominalSaja(teks)) {
@@ -602,6 +619,7 @@
       if (d.tanpaNominal) klar.push({ type: 'harga', d });
       else if (d.nominalRagu && konfKecil) klar.push({ type: 'nominal', d });
       else if (d.jenis === 'PINDAH' && d.dompetRagu) klar.push({ type: 'dompet', d });
+      else if (d.tanyaJenis) klar.push({ type: 'jenisMasuk', d });
       else if (Chat.perluDompet(d)) tanyaD.push(d);
       else jelas.push(d);
     });
@@ -641,9 +659,14 @@
     const sering = {};
     S.tx.forEach((x) => { if (x.jenis === t.jenis && x.status === 'AKTIF') sering[x.id_kategori] = (sering[x.id_kategori] || 0) + 1; });
     const def = S.kategoriDefault(t.jenis);
+    const umum = P.kataUmum(frasa);
+    // "belanja 200rb": belanja apa? → tanya kategori, tetapi kata umum tidak diingat
+    if (umum && t.jenis === 'KELUAR' && !sering['KAT-BULANAN']) sering['KAT-BULANAN'] = 0.5;
     let pilihan = S.kategoriAktif(t.jenis).filter((k) => k.id_kategori !== def).sort((a, b) => (sering[b.id_kategori] || 0) - (sering[a.id_kategori] || 0) || (a.urutan - b.urutan)).slice(0, 3);
+    if (umum) frasa = '';
     return Chat.tambah({ kind: 'pilihan', data: {
-      teks: 'Kata “' + frasa + '” belum saya kenal. Masuk kategori apa?',
+      teks: umum ? '**' + t.keterangan + ' ' + U.rp(t.nominal) + '** masuk kategori apa?' : 'Kata “' + frasa + '” belum saya kenal. Masuk kategori apa?',
+      sub: umum ? (t.jenis === 'KELUAR' ? 'Lain kali tulis barangnya, misalnya **belanja mainan 100rb**, agar langsung masuk kategori yang tepat.' : '') : undefined,
       chips: pilihan.map((k) => ({ label: k.ikon + ' ' + k.nama, aksi: 'kategori', nilai: { txId: t.id_transaksi, katId: k.id_kategori, frasa } }))
         .concat([{ label: 'Lainnya…', aksi: 'kategoriLain', nilai: { txId: t.id_transaksi, frasa }, gaya: 'ghost' }])
     } });
@@ -683,14 +706,55 @@
     if (k.type === 'dompet') {
       const sisi = !d.id_dompet_tujuan || d.id_dompet_tujuan === d.id_dompet ? 'tujuan' : 'sumber';
       const lain = sisi === 'tujuan' ? d.id_dompet : d.id_dompet_tujuan;
-      const opsi = S.dompetAktif().filter((x) => x.id_dompet !== lain);
-      return Chat.tambah({ kind: 'pilihan', data: { teks: 'Pindah saldo ' + U.rp(d.nominal) + (sisi === 'tujuan' ? ' ke dompet mana?' : ' dari dompet mana?'), draft: d, batch: k.batch, teksAsli: k.teksAsli,
-        chips: opsi.map((x) => ({ label: (x.ikon || '') + ' ' + x.nama, aksi: 'dompet', nilai: { sisi, id: x.id_dompet } })) } });
+      const saldo = Object.fromEntries(S.saldoDompet().map((x) => [x.dompet.id_dompet, x.saldo]));
+      let opsi = S.dompetAktif().filter((x) => x.id_dompet !== lain);
+      let kosong = false;
+      if (sisi === 'sumber') {
+        // Uang hanya bisa dipindah dari dompet yang ada saldonya; Tabungan hanya bila disebut
+        const bisa = opsi.filter((x) => x.tipe !== 'TABUNGAN' && (saldo[x.id_dompet] || 0) > 0);
+        if (bisa.length === 1) {
+          d.id_dompet = bisa[0].id_dompet; d.dompetRagu = false;
+          await Chat.simpanDrafts([d], k.teksAsli, k.batch);
+          return Chat.lanjutKlar();
+        }
+        if (bisa.length) opsi = bisa; else { opsi = opsi.filter((x) => x.tipe !== 'TABUNGAN'); kosong = true; }
+        opsi.sort((a, b) => (saldo[b.id_dompet] || 0) - (saldo[a.id_dompet] || 0));
+      }
+      const ket = d.keterangan && !/^pindah saldo$/i.test(d.keterangan) ? d.keterangan : 'Pindah saldo';
+      const keNama = sisi === 'sumber' && d.id_dompet_tujuan ? ' ke **' + S.namaDompet(d.id_dompet_tujuan) + '**' : '';
+      const m = await Chat.tambah({ kind: 'pilihan', data: {
+        teks: ket + ' ' + U.rp(d.nominal) + keNama + (sisi === 'tujuan' ? ' — ke dompet mana?' : ' — uangnya dari mana?'),
+        sub: kosong ? 'Semua dompet saldonya Rp0 di CashKu. Catat saldonya dulu, misalnya **saldo tunai sekarang 500rb**.' : 'Atau ketik, misalnya: **tunai**, **rek**, **gopay**',
+        draft: d, batch: k.batch, teksAsli: k.teksAsli,
+        chips: opsi.map((x) => ({ label: (x.ikon || '') + ' ' + x.nama + (sisi === 'sumber' ? ' \u00b7 ' + (saldo[x.id_dompet] < 0 ? '\u2212' : '') + U.rp(saldo[x.id_dompet] || 0) : ''), aksi: 'dompet', nilai: { sisi, id: x.id_dompet } })) } });
+      Chat.pending = { type: 'dompetPindah', pilihan: opsi.map((x) => x.id_dompet), jawabDompet: async (id) => {
+        const i = m.data.chips.findIndex((c) => c.nilai.id === id);
+        return Chat.aksi(m, m.data.chips[i] || { aksi: 'dompet', nilai: { sisi, id } }, i);
+      } };
+      return null;
+    }
+    if (k.type === 'jenisMasuk') {
+      // "masuk rekening 2jt": pemasukan baru, atau pindahan dari dompet lain?
+      const saldo = Object.fromEntries(S.saldoDompet().map((x) => [x.dompet.id_dompet, x.saldo]));
+      const asal = S.dompetAktif().filter((x) => x.id_dompet !== d.id_dompet && x.tipe !== 'TABUNGAN' && (saldo[x.id_dompet] || 0) > 0)
+        .sort((a, b) => (saldo[b.id_dompet] || 0) - (saldo[a.id_dompet] || 0));
+      if (!asal.length) { d.tanyaJenis = false; return Chat.selesaikanDraft(Chat.jadiPemasukan(d), k); }
+      const m = await Chat.tambah({ kind: 'pilihan', data: {
+        teks: U.rp(d.nominal) + ' masuk ke **' + S.namaDompet(d.id_dompet) + '**. Ini pemasukan baru, atau pindahan dari dompet lain?',
+        sub: 'Pindahan antar dompet tidak dihitung sebagai pemasukan.', draft: d, batch: k.batch, teksAsli: k.teksAsli,
+        chips: [{ label: '\ud83d\udcb0 Pemasukan', aksi: 'jenisMasuk', nilai: { masuk: true }, gaya: 'acc' }]
+          .concat(asal.map((x) => ({ label: '\ud83d\udd04 Dari ' + x.nama + ' \u00b7 ' + U.rp(saldo[x.id_dompet] || 0), aksi: 'jenisMasuk', nilai: { dari: x.id_dompet } })))
+      } });
+      Chat.pending = { type: 'jenisMasuk', pilihan: asal.map((x) => x.id_dompet),
+        jawabMasuk: () => Chat.aksi(m, m.data.chips[0], 0),
+        jawabDompet: async (id) => { const i = m.data.chips.findIndex((c) => c.nilai.dari === id); return Chat.aksi(m, m.data.chips[i] || { aksi: 'jenisMasuk', nilai: { dari: id } }, i); } };
+      return null;
     }
     if (k.type === 'dompetBayar') {
       const ds = k.ds, masuk = ds.every((x) => x.jenis === 'MASUK');
       const saldo = Object.fromEntries(S.saldoDompet().map((x) => [x.dompet.id_dompet, x.saldo]));
-      const semuaOpsi = S.dompetAktif().filter((x) => !k.pilihan || k.pilihan.indexOf(x.id_dompet) > -1);
+      // Tabungan tidak ditawarkan untuk membayar, kecuali memang disebut (masuk daftar pilihan)
+      const semuaOpsi = S.dompetAktif().filter((x) => (!k.pilihan ? x.tipe !== 'TABUNGAN' : k.pilihan.indexOf(x.id_dompet) > -1));
       // Membayar hanya bisa dari dompet yang ada saldonya (uang masuk boleh ke dompet mana pun)
       let opsi = masuk ? semuaOpsi : semuaOpsi.filter((x) => (saldo[x.id_dompet] || 0) > 0);
       const kosongSemua = !masuk && !opsi.length;
@@ -736,8 +800,16 @@
   };
 
   /** Draft yang dompetnya belum jelas: default "Tanya dulu" atau nama yang dipakai lebih dari satu dompet */
+  /** Uang masuk dijadikan pemasukan (kategori ditanyakan bila belum jelas) */
+  Chat.jadiPemasukan = function (d) {
+    d.jenis = 'MASUK'; d.tanyaJenis = false;
+    if (!d.keterangan || /^(masuk|uang|pemasukan lain|transaksi|transfer masuk|uang masuk)$/i.test(d.keterangan)) d.keterangan = 'Uang masuk';
+    if (!d.kategoriDikenal) { d.id_kategori = S.kategoriDefault('MASUK'); d.frasaBelajar = 'uang masuk'; }
+    return d;
+  };
   Chat.perluDompet = (d) => d.jenis !== 'PINDAH' && S.fiturDompet() && !d.id_dompet && (d.tanyaDompet || (d.dompetPilihan && d.dompetPilihan.length > 1));
   Chat.selesaikanDraft = async function (d, k) {
+    if (d.tanyaJenis) { Chat.antreKlar.unshift({ type: 'jenisMasuk', d, batch: k.batch, teksAsli: k.teksAsli }); return Chat.lanjutKlar(); }
     if (Chat.perluDompet(d)) Chat.antreKlar.unshift({ type: 'dompetBayar', ds: [d], pilihan: d.dompetPilihan || null, batch: k.batch, teksAsli: k.teksAsli });
     else await Chat.simpanDrafts([d], k.teksAsli, k.batch);
     return Chat.lanjutKlar();

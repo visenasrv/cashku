@@ -443,3 +443,5 @@ textarea.input { height: auto; min-height: 96px; padding: 12px 14px; resize: ver
 label.btn { cursor: pointer; }
 label.btn.sibuk { opacity: .6; pointer-events: none; }
 .spin-sm { width: 14px; height: 14px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: spin .7s linear infinite; flex: none; display: inline-block; }
+
+.seg.seg-4 button { font-size: 13px; padding-left: 4px; padding-right: 4px; white-space: nowrap; }

@@ -83,7 +83,9 @@
   S.fiturDompet = () => String(S.master.pengaturan.fitur_dompet || 'ON') === 'ON';
   S.namaKeluarga = () => 'Keluarga';                 // tampilan cukup "Keluarga", tanpa nama keluarga
   /** Judul transaksi untuk tampilan: pindah saldo dari nabung ditampilkan sebagai "Nabung" */
-  S.judulTx = (t) => t.jenis === 'SALDO' ? 'Penyesuaian saldo' : t.jenis !== 'PINDAH' ? t.keterangan : (/\b(me)?nabung\b/i.test(t.keterangan || '') ? 'Nabung' : 'Pindah saldo');
+  S.judulTx = (t) => t.jenis === 'SALDO' ? 'Penyesuaian saldo' : t.jenis !== 'PINDAH' ? t.keterangan
+    : /\b(me)?nabung\b/i.test(t.keterangan || '') ? 'Nabung'
+    : /^(tarik tunai|ambil tabungan|setor tunai|top up .+)$/i.test(t.keterangan || '') ? U.huruf1(t.keterangan) : 'Pindah saldo';
   S.kelasJenis = (j) => (j === 'MASUK' ? 't-in' : j === 'KELUAR' ? 't-out' : 't-tr');
   S.ikonTx = (t) => t.jenis === 'SALDO' ? '\u2696\ufe0f' : t.jenis === 'PINDAH' ? (S.judulTx(t) === 'Nabung' ? '\ud83d\udc37' : '\ud83d\udd04') : S.kat(t.id_kategori).ikon;
   S.dompetAktif = () => S.master.dompet.filter((d) => d.aktif !== false);

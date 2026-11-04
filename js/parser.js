@@ -24,9 +24,22 @@
   const PREP = ['dari', 'ke', 'di', 'pakai', 'pake', 'via', 'lewat', 'dengan', 'pakai saldo', 'pake saldo', 'dgn'];
   const TIPE_KATA = {
     TUNAI: ['tunai', 'cash', 'kas', 'kes', 'kontan', 'uang tunai', 'uang cash', 'duit tunai'],
-    REKENING: ['rekening', 'rek', 'bank', 'atm', 'tabungan', 'debit', 'm-banking', 'mbanking'],
-    EWALLET: ['e-wallet', 'ewallet', 'e wallet', 'dompet digital', 'dompet online']
+    REKENING: ['rekening', 'rek', 'bank', 'atm', 'debit', 'm-banking', 'mbanking'],
+    EWALLET: ['e-wallet', 'ewallet', 'e wallet', 'dompet digital', 'dompet online'],
+    TABUNGAN: ['tabungan', 'tabunganku', 'uang tabungan', 'celengan', 'simpanan', 'dana darurat']
   };
+  // Kata umum yang tidak menentukan kategori ("belanja mainan" → mainan; "belanja 200rb" → ditanyakan)
+  const KAT_UMUM = /^(belanja|belanjaan|blanja|shopping|beli|bayar|pengeluaran|pemasukan|uang masuk|masuk|pemasukan lain|pindah saldo|transaksi|lain lain|lain-lain)$/;
+  const kataUmum = (f) => KAT_UMUM.test(String(f || '').trim().toLowerCase());
+  // Penanda pindah saldo bawaan (selalu berlaku walau database lama belum punya kata ini)
+  const PINDAH_BAWAAN = ['nabung', 'menabung', 'pindah dana', 'pindah uang', 'pindahin', 'pindahkan', 'mindahin', 'memindahkan', 'dipindah',
+    'transfer dana', 'transfer dari', 'tf dari', 'tf ke', 'kirim ke', 'isi rekening', 'isi rek', 'isi tabungan', 'isi celengan', 'isi e-wallet',
+    'isi ewallet', 'isi linkaja', 'masukin ke', 'masukkan ke', 'simpan ke', 'ambil tabungan', 'tarik tabungan', 'ambil dari tabungan',
+    'bongkar celengan', 'ambil uang', 'tarik uang', 'setor ke', 'top-up'];
+  // Penanda yang hanya berarti pindah bila ada nama dompet (sesudahnya untuk "... ke")
+  const PINDAH_PERLU_DOMPET = /^(transfer ke|setor|pindah|pindah dana|pindah uang|pindahin|pindahkan|mindahin|memindahkan|dipindah|transfer dana|transfer dari|tf dari|tf ke|kirim ke|masukin ke|masukkan ke|simpan ke|ambil uang|tarik uang)$/;
+  // Penanda uang masuk yang umum: bila menyebut dompet, bisa jadi pemasukan ATAU pindahan → ditanyakan
+  const MASUK_UMUM = /^(masuk|uang masuk|transfer masuk|dana masuk|saldo masuk|terima transfer|diterima|terima|menerima)$/;
   // QRIS bisa dibayar dari rekening (m-banking) maupun e-wallet → bila tidak disebut dompetnya, ditanyakan
   const KATA_QRIS = ['qris', 'scan qris', 'scan qr', 'qr code', 'kode qr'];
   // Kata e-commerce: selalu berarti Belanja Online walau ada kata kategori lain ("belanja di shopee")
@@ -92,8 +105,10 @@
     });
     // Kata umum per jenis dompet ("kas", "rek", "bank", "dompet digital"...). Bila jenisnya punya >1 dompet → ditanyakan.
     const sudah = new Set(dompet.map((e) => e.frasa));
+    const idsTipe = (tp) => ctx.dompet.filter((d) => d.aktif !== false && d.tipe === tp).map((d) => d.id_dompet);
     Object.keys(TIPE_KATA).forEach((tp) => {
-      const ids = ctx.dompet.filter((d) => d.aktif !== false && d.tipe === tp).map((d) => d.id_dompet);
+      let ids = idsTipe(tp);
+      if (!ids.length && tp === 'TABUNGAN') ids = idsTipe('REKENING');
       if (ids.length) TIPE_KATA[tp].forEach((f) => { if (!sudah.has(f)) ids.forEach((id) => dompet.push({ frasa: f, id, tipe: tp, umum: true })); });
     });
     const idsQris = ctx.dompet.filter((d) => d.aktif !== false && (d.tipe === 'REKENING' || d.tipe === 'EWALLET')).map((d) => d.id_dompet);
@@ -103,7 +118,7 @@
       [a.nama, a.username].filter(Boolean).forEach((x) => anggota.push({ frasa: normal(x), id: a.id }));
     });
     // Penanda bawaan yang selalu berlaku walau database dibuat sebelum kata ini ada
-    ['nabung', 'menabung'].forEach((f) => { if (!pindah.some((e) => e.frasa === f)) pindah.push({ frasa: f }); });
+    PINDAH_BAWAAN.forEach((f) => { if (!pindah.some((e) => e.frasa === f)) pindah.push({ frasa: f }); });
     kat.sort(byLen); masuk.sort(byLen); pindah.sort(byLen); dompet.sort(byLen); anggota.sort(byLen);
     const known = new Set(VOCAB.concat(STOP, KATA_MASUK_HAPUS, PREP, Object.keys(ABBR), Object.values(ABBR),
       ['ini', 'itu', 'yang', 'dan', 'atau', 'saya', 'aku', 'kami', 'keluarga', 'semua', 'anggota', 'pdf', 'per', 'orang']));
@@ -417,16 +432,24 @@
     const tanpaNominal = hapusRentang(s, buang);
 
     // Jenis
-    const katSemua = cariSemua(tanpaNominal, idx.kat);
+    const katSemua = cariSemua(tanpaNominal, idx.kat).filter((k) => !kataUmum(k.frasa));
     const katTerpanjang = katSemua.slice().sort((a, b) => b.len - a.len)[0];
-    const dompetHits = ctx.fiturDompet ? cariSemua(tanpaNominal, idx.dompet) : [];
+    let dompetHits = ctx.fiturDompet ? cariSemua(tanpaNominal, idx.dompet) : [];
+    // "pindah dana", "transfer dana", "dana masuk": di sini "dana" = uang, bukan e-wallet DANA
+    const danaUmum = (hh) => hh.frasa === 'dana' && /\b(pindah|pindahin|pindahkan|transfer|tf|kirim|uang|sumber)\s+$/.test(tanpaNominal.slice(0, hh.index)) ||
+      hh.frasa === 'dana' && /^\s+(masuk|keluar|darurat|cair)\b/.test(tanpaNominal.slice(hh.index + hh.len));
+    dompetHits = dompetHits.filter((hh) => !danaUmum(hh));
     let pindahM = null;
     for (const e of idx.pindah) {
       const h = cari(tanpaNominal, e.frasa);
       if (!h) continue;
       // Frasa kategori yang lebih panjang & menutupi penanda (mis. "top up game") → bukan pindah
       if (katTerpanjang && katTerpanjang.len > h.len && katTerpanjang.index <= h.index && katTerpanjang.index + katTerpanjang.len >= h.index + h.len) continue;
-      if (/^(transfer ke|setor|pindah)$/.test(e.frasa) && !dompetHits.length) continue;
+      if (PINDAH_PERLU_DOMPET.test(e.frasa)) {
+        if (!dompetHits.length) continue;
+        // "kirim ke ibu 500rb via bank" bukan pindah: untuk penanda "... ke", dompet harus tepat sesudahnya
+        if (/ ke$/.test(e.frasa) && !dompetHits.some((hh) => hh.index >= h.index + h.len && hh.index <= h.index + h.len + 1)) continue;
+      }
       pindahM = h; break;
     }
     const awalKeluar = /^(beli|bayar|bayarin|membeli|membayar|kasih|kirim|transfer ke)\b/.test(tanpaNominal.trim());
@@ -445,40 +468,57 @@
       const dk = (id) => idx.dompetById[id];
       const tipe = (tp) => ctx.dompet.filter((x) => x.aktif !== false && x.tipe === tp).map((x) => x.id_dompet);
       let tujuan = null, sumber = null;
+      const f = pindahM.frasa;
+      const nabung = /nabung/.test(f);
+      // Dompet yang namanya bagian dari penanda ("ambil tabungan", "isi rekening") tetap dihitung
       dompetHits.forEach((hh) => {
         const prep = kataSebelum(tanpaNominal, hh.index);
-        if (/\b(ke)$/.test(prep) && !tujuan) tujuan = hh.id;
-        else if (/\b(dari|pakai|pake|via|lewat|pakai saldo)$/.test(prep) && !sumber) sumber = hh.id;
+        if ((/\b(ke|kedalam|masuk)$/.test(prep) || (nabung && /\b(di|dalam)$/.test(prep))) && !tujuan) tujuan = hh.id;
+        else if (/\b(dari|pakai|pake|via|lewat|pakai saldo|uang|saldo)$/.test(prep) && !sumber && hh.id !== tujuan) sumber = hh.id;
       });
-      const f = pindahM.frasa;
       const sisa = dompetHits.map((hh) => hh.id).filter((id) => id !== tujuan && id !== sumber);
-      if (/tarik|ambil/.test(f)) {
-        tujuan = tujuan || tipe('TUNAI')[0] || null;
-        sumber = sumber || sisa.find((id) => id !== tujuan) || tipe('REKENING')[0] || null;
-      } else if (/setor|nabung/.test(f)) {
-        // Setor / nabung: uang tunai masuk ke rekening (kecuali dompet lain disebut)
+      const satu = (ids) => (ids.length === 1 ? ids[0] : null);
+      if (/tarik|ambil|bongkar/.test(f)) {
+        // Tarik / ambil: uang keluar dari rekening / tabungan menjadi tunai
+        const dariTab = /tabungan|celengan/.test(f) ? (tipe('TABUNGAN')[0] || null) : null;
+        sumber = sumber || dariTab || sisa.find((id) => id !== tujuan && dk(id) && dk(id).tipe !== 'TUNAI') || null;
+        tujuan = tujuan || sisa.find((id) => id !== sumber) || tipe('TUNAI')[0] || null;
+        if (!sumber) sumber = satu(tipe('REKENING'));
+      } else if (nabung) {
+        // Nabung: masuk ke dompet Tabungan (bila ada); asal uangnya ditanyakan bila tidak disebut
+        sisa.forEach((id) => { const tp = dk(id) && dk(id).tipe; if (tp === 'TABUNGAN' && !tujuan) tujuan = id; else if (!sumber && id !== tujuan) sumber = id; });
+        tujuan = tujuan || tipe('TABUNGAN')[0] || tipe('REKENING')[0] || null;
+      } else if (/setor/.test(f)) {
+        // Setor tunai: tunai masuk ke rekening
         sumber = sumber || tipe('TUNAI')[0] || null;
-        tujuan = tujuan || sisa.find((id) => id !== sumber) || tipe('REKENING')[0] || null;
+        tujuan = tujuan || sisa.find((id) => id !== sumber) || satu(tipe('REKENING')) || null;
       } else {
-        // top up / isi / pindah / transfer ke
+        // top up / isi / pindah / transfer / kirim ke: tujuan = dompet sesudah penanda; asal ditanyakan bila tidak disebut
         if (!tujuan) {
-          const sesudah = dompetHits.find((hh) => hh.index >= pindahM.index + pindahM.len && hh.id !== sumber);
+          const isiDari = /^(isi|top)/.test(f) ? dompetHits.find((hh) => hh.index >= pindahM.index && hh.index <= pindahM.index + pindahM.len + 1 && hh.id !== sumber) : null;
+          const sesudah = isiDari || dompetHits.find((hh) => hh.index >= pindahM.index + pindahM.len && hh.id !== sumber);
           tujuan = sesudah ? sesudah.id : (sisa[0] || null);
         }
         if (!sumber) sumber = dompetHits.map((hh) => hh.id).find((id) => id !== tujuan) || null;
-        if (!sumber) {
-          const def = ctx.saya.id_dompet_default;
-          sumber = def && def !== tujuan && dk(def) ? def : (tipe('REKENING').find((id) => id !== tujuan) || null);
-        }
       }
       d.id_dompet = sumber; d.id_dompet_tujuan = tujuan;
+      d.sumberDitanya = !sumber;
       if (!tujuan || !sumber || tujuan === sumber) d.dompetRagu = true;
       const ketP = bersihkanKet(hapusRentang(tanpaNominal, dompetHits.map((hh) => {
         const prep = kataSebelum(tanpaNominal, hh.index);
         const pakaiPrep = /\b(pakai|pake|via|lewat|dari|ke|di|dengan|pakai saldo)$/.test(prep);
         return [hh.index - (pakaiPrep ? prep.length + 1 : 0), hh.index + hh.len];
       })), jenis);
-      d.keterangan = U_huruf1(ketP || (/nabung/.test(f) ? 'Nabung' : 'Pindah saldo'));
+      // Keterangan yang mudah dibaca bila isinya hanya kata kerja ("isi", "tarik", "pindahin")
+      const nm = (id) => (dk(id) ? dk(id).nama : '');
+      const verba = /^(isi|top up|topup|top-up|pindah dana|transfer dana|dana|pindah|pindahin|pindahkan|mindahin|memindahkan|dipindah|kirim|tf|transfer|tarik|ambil|ambil uang|tarik uang|setor|bongkar|masukin|masukkan|simpan|nabung|menabung|pindah uang|pindah saldo)$/;
+      let label = ketP;
+      if (!label || verba.test(label)) {
+        const tpS = sumber && dk(sumber) ? dk(sumber).tipe : '', tpT = tujuan && dk(tujuan) ? dk(tujuan).tipe : '';
+        label = nabung || tpT === 'TABUNGAN' ? 'Nabung' : tpS === 'TABUNGAN' ? 'Ambil tabungan' : /setor/.test(f) ? 'Setor tunai'
+          : /tarik|ambil/.test(f) && tpT === 'TUNAI' ? 'Tarik tunai' : /^(isi|top)/.test(f) && tujuan ? 'Top up ' + nm(tujuan) : 'Pindah saldo';
+      }
+      d.keterangan = U_huruf1(label);
       return d;
     }
 
@@ -507,8 +547,10 @@
       } else if (ctx.saya.id_dompet_default === 'TANYA') {
         d.id_dompet = ''; d.tanyaDompet = true;                                    // default "Tanya dulu"
       } else {
-        d.id_dompet = ctx.saya.id_dompet_default && idx.dompetById[ctx.saya.id_dompet_default] ? ctx.saya.id_dompet_default : (ctx.dompet.find((x) => x.aktif !== false) || {}).id_dompet || '';
+        d.id_dompet = ctx.saya.id_dompet_default && idx.dompetById[ctx.saya.id_dompet_default] ? ctx.saya.id_dompet_default : (ctx.dompet.find((x) => x.aktif !== false && x.tipe !== 'TABUNGAN') || {}).id_dompet || '';
       }
+      // "masuk rekening 2jt": bisa pemasukan, bisa pindahan dari tunai → ditanyakan
+      if (jenis === 'MASUK' && (!kat || kat.target === ctx.kategoriDefaultMasuk) && masukM && MASUK_UMUM.test(masukM.frasa) && d.dompetDisebut && d.id_dompet) d.tanyaJenis = true;
     } else d.id_dompet = '';
 
     const rangesDompet = dompetHits.map((hh) => {
@@ -523,6 +565,7 @@
     }
     d.keterangan = U_huruf1(ket);
     d.frasaBelajar = ket.split(' ').slice(0, 3).join(' ');
+    if (!kat && (kataUmum(d.frasaBelajar) || kataUmum(ket))) d.frasaBelajar = 'belanja';
     return d;
   }
   function idsFrasa(idx, f) { return Array.from(new Set(idx.dompet.filter((e) => e.frasa === f).map((e) => e.id))); }
@@ -617,7 +660,7 @@
     const reKecil = /\b(terkecil|terendah|termurah|terhemat|paling (?:kecil|sedikit|rendah|murah|hemat))\b/;
     const kataTanya = /\b(berapa|total|rekap|ringkasan|habis|sisa|saldo|pengeluaran|pemasukan|pendapatan|anggaran)\b|\?/.test(t) ||
       (/\brata\b/.test(t) ? /\brata(?:\s*-\s*|\s+)rata\b/.test(t) : reRata.test(t)) || reBesar.test(t) || reKecil.test(t);
-    const katHit = cariSemua(t, idx.kat).filter((k) => !/^(pemasukan|uang masuk|belanja)$/.test(k.frasa) || !/\b(pengeluaran|pemasukan)\b/.test(t)).sort((a, b) => b.len - a.len)[0];
+    const katHit = cariSemua(t, idx.kat).filter((k) => !kataUmum(k.frasa)).sort((a, b) => b.len - a.len)[0];
     if (!nominalKuat && (kataTanya || (adaPeriode && (katHit || /\b(transaksi|catatan|riwayat)\b/.test(t) || per.jenis === 'hari')))) {
       const q = { type: 'tanya', perubahan: kor.perubahan, teksKoreksi: t };
       if (per.ok) q.periode = per; else if (adaPeriode) q.periodeError = per;
@@ -687,7 +730,7 @@
     return { type: 'tidak_dikenal', saran: saran.slice(0, 3).concat(saran.length > 3 ? [saran[saran.length - 1]] : []) };
   }
 
-  const Parser = { analisis, periode, nominalSaja, normal, cariNominal, siapkan, lev, BULAN, dompetDari };
+  const Parser = { analisis, periode, nominalSaja, normal, cariNominal, siapkan, lev, BULAN, dompetDari, kataUmum };
   g.Parser = Parser;
   if (typeof module !== 'undefined') module.exports = Parser;
 })(typeof window !== 'undefined' ? window : globalThis);

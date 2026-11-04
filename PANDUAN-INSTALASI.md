@@ -97,7 +97,13 @@ Claude akan memandu tahap ini satu per satu di percakapan.
 | `bensin 25rb, makan siang 30rb` | 2 transaksi sekaligus |
 | `gaji masuk bri 10jt` | Pemasukan ke rekening |
 | `top up gopay 100rb dari bri` | Pindah saldo rekening → e-wallet |
-| `nabung 500rb` | Uang tunai masuk ke rekening (tercatat sebagai Nabung) |
+| `nabung 500rb` · `nabung 1jt dari rekening` | Uang masuk ke dompet **Tabungan**; bila asalnya tidak disebut, CashKu bertanya dari dompet mana |
+| `ambil tabungan 200rb` · `bongkar celengan 300rb` · `beli hp 3jt dari tabungan` | Memakai uang Tabungan (Tabungan hanya dipakai bila disebut) |
+| `masuk rekening 2jt` · `uang masuk ke gopay 100rb` | CashKu bertanya: pemasukan baru, atau pindahan dari dompet lain? |
+| `top up gopay 100rb` · `isi e-wallet 50rb` · `isi rekening 1jt` | Pindah saldo; CashKu bertanya uangnya dari mana (hanya dompet yang ada saldonya) |
+| `pindah dana tunai ke rek 500rb` · `pindahin 200rb dari gopay ke rekening` · `transfer dari bca ke gopay 100rb` · `tarik tunai 500rb` · `setor tunai 1jt` | Pindah saldo langsung tercatat |
+| `belanja mainan 100rb` · `belanja sayur 30rb` · `belanja 200rb` | Kategori mengikuti barangnya; `belanja` saja → ditanya kategorinya |
+| `beli umpan mancing 25rb` · `sewa lapangan futsal 150rb` | Kategori **Hobi** |
 | `saldo saya dibank sekarang 5.000.000` · `rekening sekarang 5jt` · `di bank ada 5jt` | Saldo Rekening disesuaikan menjadi Rp5.000.000 |
 | `uang tunai saya sekarang 1,5jt` · `kas tinggal 300rb` · `tunai sisa 200rb` | Saldo Tunai disesuaikan |
 | `saldo saya sekarang 2jt` (tanpa nama dompet) | CashKu menanyakan dompet yang dimaksud |
@@ -123,6 +129,8 @@ Claude akan memandu tahap ini satu per satu di percakapan.
 
 ## Memperbarui aplikasi
 
+> **Pembaruan 1.0.8 (Tabungan, Hobi, pindah saldo fleksibel, "belanja" umum)** mengubah **server dan tampilan**: tempel ulang `Kode.gs` lalu buat *Versi baru*. Dompet **Tabungan**, kategori **Hobi**, dan perubahan kata "belanja" otomatis ditambahkan ke database lama saat aplikasi sinkron (atau jalankan `migrasiData` sekali). Dompet Tabungan bisa dimatikan di **Pengaturan → Kelola dompet → Tabungan → Aktif**.
+>
 > **Pembaruan 1.0.5 (pertanyaan terbesar & rata-rata, Belanja Online, QRIS)** mengubah **server dan tampilan**: tempel ulang `Kode.gs` lalu buat *Versi baru*. Kategori **Belanja Online** dan kata kuncinya otomatis ditambahkan ke database lama saat aplikasi pertama kali sinkron (atau jalankan fungsi `migrasiData` sekali dari editor). Lalu unggah ulang tampilan.
 >
 > **Pembaruan 1.0.2 (penyesuaian saldo, Tanya dulu, warna instan, latar chat)** mengubah **keduanya**: tempel ulang `Kode.gs` yang baru lalu buat *Versi baru* (langkah di bawah; **tidak perlu** menjalankan `setupAppEnvironment` lagi), kemudian unggah ulang tampilan ke GitHub.
