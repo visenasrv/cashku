@@ -205,6 +205,17 @@
     if ((m = /\bkemarin\s+lusa\b/.exec(t))) return { tanggal: addD(hariIni, -2), frasa: m[0], index: m.index };
     if ((m = /\bkemarin\b/.exec(t))) return { tanggal: addD(hariIni, -1), frasa: m[0], index: m.index };
     if ((m = /\b(\d{1,2})\s*hari\s*(?:yang\s*)?lalu\b/.exec(t))) return { tanggal: addD(hariIni, -Number(m[1])), frasa: m[0], index: m.index };
+    // "tanggal 5 oktober", "5 okt", "tgl 3 september 2026", "5/10"
+    const reTB = new RegExp('\\b(?:(?:tanggal|tgl)\\s*)?(\\d{1,2})\\s+(' + NAMA_BULAN_RE + ')\\b(?:\\s+(20\\d{2}))?');
+    if ((m = reTB.exec(t)) || (m = /\b(?:(?:tanggal|tgl)\s*)?(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/.exec(t))) {
+      const d = Number(m[1]); const h = pd(hariIni);
+      const nb = /^\d+$/.test(m[2]) ? Number(m[2]) : (BULAN.indexOf(m[2]) > -1 ? BULAN.indexOf(m[2]) + 1 : BULAN_SINGKAT[m[2]]);
+      let y = m[3] ? Number(m[3].length === 2 ? '20' + m[3] : m[3]) : h.getFullYear();
+      if (nb >= 1 && nb <= 12) {
+        if (!m[3] && ymd(y, nb, Math.min(d, 28)) > hariIni) y--;           // tanpa tahun: tanggal yang sudah lewat
+        if (d >= 1 && d <= hariDlmBulan(y, nb)) return { tanggal: ymd(y, nb, d), frasa: m[0], index: m.index };
+      }
+    }
     if ((m = /\btanggal\s*(\d{1,2})\b(?!\s*(?:-|sampai|hingga))/.exec(t))) {
       const d = Number(m[1]); const h = pd(hariIni);
       let y = h.getFullYear(), mo = h.getMonth() + 1;
@@ -254,7 +265,7 @@
       }
     }
     if (/\bhari ini\b/.test(t)) return { ok: true, mulai: hariIni, sampai: hariIni, label: 'Hari ini (' + tglLabel(hariIni) + ')', jenis: 'hari' };
-    if (/\bkemarin\b/.test(t)) { const k = addD(hariIni, -1); return { ok: true, mulai: k, sampai: k, label: 'Kemarin (' + tglLabel(k) + ')', jenis: 'hari' }; }
+    if (/(?<!(?:bulan|minggu|pekan|tahun) )\bkemarin\b/.test(t)) { const k = addD(hariIni, -1); return { ok: true, mulai: k, sampai: k, label: 'Kemarin (' + tglLabel(k) + ')', jenis: 'hari' }; }
     if (/\b(?:minggu|pekan) ini\b/.test(t)) { const s = senin(hariIni); return { ok: true, mulai: s, sampai: addD(s, 6), label: 'Minggu ini (' + tglLabel(s).replace(/ \d{4}$/, '') + '–' + tglLabel(addD(s, 6)) + ')', jenis: 'minggu' }; }
     if (/\b(?:minggu|pekan) (?:lalu|kemarin)\b/.test(t)) { const s = addD(senin(hariIni), -7); return { ok: true, mulai: s, sampai: addD(s, 6), label: 'Minggu lalu (' + tglLabel(s).replace(/ \d{4}$/, '') + '–' + tglLabel(addD(s, 6)) + ')', jenis: 'minggu' }; }
     if (/\bbulan ini\b/.test(t)) return bulanPenuh(Y, M);
@@ -658,7 +669,7 @@
     const reRata = /\b(rata(?:\s*-\s*rata|\s+rata|2)?|rerata|average)\b/;
     const reBesar = /\b(terbesar|tertinggi|termahal|terboros|paling (?:besar|banyak|tinggi|mahal|boros|gede))\b/;
     const reKecil = /\b(terkecil|terendah|termurah|terhemat|paling (?:kecil|sedikit|rendah|murah|hemat))\b/;
-    const kataTanya = /\b(berapa|total|rekap|ringkasan|habis|sisa|saldo|pengeluaran|pemasukan|pendapatan|anggaran)\b|\?/.test(t) ||
+    const kataTanya = /\b(berapa|brp|total|rekap|ringkasan|habis|sisa|saldo|pengeluaran|pemasukan|pendapatan|anggaran|kapan|riwayat|histori|history)\b|\?/.test(t) ||
       (/\brata\b/.test(t) ? /\brata(?:\s*-\s*|\s+)rata\b/.test(t) : reRata.test(t)) || reBesar.test(t) || reKecil.test(t);
     const katHit = cariSemua(t, idx.kat).filter((k) => !kataUmum(k.frasa)).sort((a, b) => b.len - a.len)[0];
     if (!nominalKuat && (kataTanya || (adaPeriode && (katHit || /\b(transaksi|catatan|riwayat)\b/.test(t) || per.jenis === 'hari')))) {
@@ -688,6 +699,21 @@
         if (katSpesifik && katSpesifik.jenis === jenisQ && q.kelompok !== 'kategori') q.kategori = katSpesifik.target;
         return q;
       }
+      // Pindah saldo: "bulan kemarin nabung berapa", "top up gopay bulan ini", "tarik tunai bulan lalu"
+      const pq = /\b(me)?nabung\b/.test(t) ? 'nabung' : /\b(ambil|tarik|bongkar|pakai) (tabungan|celengan)\b/.test(t) ? 'ambiltab'
+        : /\b(top ?up|topup|isi saldo|isi (gopay|ovo|dana|e-?wallet|shopeepay|linkaja))\b/.test(t) ? 'topup'
+        : /\b(tarik tunai|ambil (uang|di atm|atm)|tarik (uang|di atm))\b/.test(t) ? 'tarik' : /\bsetor\b/.test(t) ? 'setor'
+        : /\b(pindah|transfer|tf) (saldo|dana|uang)\b/.test(t) ? 'semua' : '';
+      if (pq) { q.metric = 'pindah'; q.pindah = pq; return q; }
+      // "kapan terakhir beli bensin"
+      if (katHit && /\b(kapan|terakhir (kali )?(beli|bayar|isi|makan|ke|servis|ganti|ngopi|jajan)|terakhir kali)\b/.test(t)) {
+        q.metric = 'terakhir'; q.kategori = katHit.target; q.kata = katHit.frasa; return q;
+      }
+      // Saldo dompet tanpa kata "saldo": "berapa tabungan sekarang", "uang di rekening berapa", "tunai tinggal berapa"
+      const dq0 = cariDompetQ(t, idx);
+      if (!/\bsaldo\b/.test(t) && dq0 && !katHit && !/\b(pengeluaran|pemasukan|keluar|masuk|transaksi|riwayat|bayar|beli|belanja)\b/.test(t)) {
+        q.metric = 'saldo'; if (dq0.id) q.dompet = dq0.id; else q.dompetAmbigu = dq0.ambigu; return q;
+      }
       if (/\bsaldo\b/.test(t)) {
         q.metric = 'saldo';
         const dq = cariDompetQ(t, idx); if (dq && dq.id) q.dompet = dq.id; else if (dq) q.dompetAmbigu = dq.ambigu;
@@ -697,6 +723,9 @@
         q.metric = 'masuk'; if (katHit && katHit.jenis === 'MASUK') q.kategori = katHit.target;
       } else if (katHit) {
         q.metric = 'kategori'; q.kategori = katHit.target;
+        // kata yang lebih spesifik dari kategorinya ("listrik" di Tagihan, "kopi" di Jajan) → saring per kata
+        const nk = normal((idx.katAktif[katHit.target] || {}).nama || '');
+        if (nk.split(/[^a-z0-9]+/).indexOf(katHit.frasa) < 0 && nk !== katHit.frasa) q.kata = katHit.frasa;
       } else if (/\b(pengeluaran|keluar|habis|spending)\b/.test(t)) q.metric = 'keluar';
       else if (/\b(transaksi|catatan|riwayat)\b/.test(t) || (per.ok && per.jenis === 'hari')) q.metric = 'daftar';
       else if (/\b(ringkasan|rekap|total)\b/.test(t) || per.ok) q.metric = 'ringkasan';

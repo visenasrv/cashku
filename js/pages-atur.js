@@ -384,14 +384,14 @@
   // =============================================================
   UI.Router.daftar('dompet', {
     izin: () => S.isAdmin(),
-    template() { return UI.header({ title: 'Kelola Dompet' }) + '<div class="page-body" data-body style="padding-bottom:100px"></div><button class="fab" data-tambah>' + ic('plus') + 'Dompet</button>'; },
+    template() { return UI.header({ title: 'Kelola Dompet' }) + '<div class="page-body" data-body style="padding-bottom:40px"></div>'; },
     init(el) {
-      el.querySelector('[data-tambah]').onclick = () => ubahDompet(null);
       el.addEventListener('click', (e) => { const b = e.target.closest('[data-dmp]'); if (b) ubahDompet(b.dataset.dmp); });
     },
     show(el) {
       const saldo = Object.fromEntries(S.saldoDompet().map((x) => [x.dompet.id_dompet, x.saldo]));
-      el.querySelector('[data-body]').innerHTML = (navigator.onLine === false ? '<div class="banner amber" style="margin-bottom:12px">' + ic('cloud-off') + '<span class="small">Mengubah dompet perlu koneksi internet.</span></div>' : '') +
+      const adaTab = S.master.dompet.some((d) => d.tipe === 'TABUNGAN');
+      el.querySelector('[data-body]').innerHTML = (!adaTab ? '<div class="banner amber" style="margin-bottom:12px">' + ic('triangle-alert') + '<span class="small">Dompet <b>Tabungan</b> belum ada di server. Tempel ulang <b>Kode.gs</b> versi terbaru di Apps Script, jalankan <b>migrasiData</b>, lalu buat <b>Versi baru</b> pada deployment.</span></div>' : '') + (navigator.onLine === false ? '<div class="banner amber" style="margin-bottom:12px">' + ic('cloud-off') + '<span class="small">Mengubah dompet perlu koneksi internet.</span></div>' : '') +
         '<div class="list-group">' + S.master.dompet.map((d) => '<button class="list-row" data-dmp="' + U.esc(d.id_dompet) + '"' + (d.aktif === false ? ' style="opacity:.5"' : '') + '><span class="ico-c">' + U.esc(d.ikon || '💳') + '</span><span class="grow"><b style="display:block;font-weight:600">' + U.esc(d.nama) + '</b><span class="small muted">' + ({ TUNAI: 'Tunai', REKENING: 'Rekening bank', EWALLET: 'E-wallet', TABUNGAN: 'Tabungan' })[d.tipe] + (d.pemilik ? ' · milik ' + U.esc(S.orang(d.pemilik).nama) : ' · keluarga') + '</span></span>' +
           (d.aktif === false ? '<span class="badge b-slate">Nonaktif</span>' : '<b class="num">' + U.rp(saldo[d.id_dompet] || 0) + '</b>') + ic('chevron-right', 'chev') + '</button>').join('') + '</div>' +
         '<p class="help" style="margin-top:12px">Alias adalah kata yang dikenali di chat untuk dompet ini, misalnya “bri” atau “gopay”.</p>' +

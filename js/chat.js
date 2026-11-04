@@ -964,6 +964,56 @@
         (nHari <= 3 ? 'Makin banyak hari tercatat, makin akurat rata-ratanya. ' : '') + kor } });
   };
 
+  // ---------- Riwayat: kata, pindah saldo, terakhir kali ----------
+  const cocokKata = (t, kata) => (' ' + P.normal((t.keterangan || '') + ' ' + (t.teks_asli || '')) + ' ').indexOf(' ' + kata + ' ') > -1;
+  Chat.gerakDompet = function (id, n) {
+    return S.txTerlihat({}).filter((t) => t.id_dompet === id || t.id_dompet_tujuan === id)
+      .sort((a, b) => (b.tanggal_transaksi + b.waktu_catat).localeCompare(a.tanggal_transaksi + a.waktu_catat)).slice(0, n)
+      .map((t) => {
+        const masuk = t.jenis === 'MASUK' || (t.jenis === 'PINDAH' && t.id_dompet_tujuan === id) || (t.jenis === 'SALDO' && t.nominal > 0);
+        return { l: U.tglPendek(t.tanggal_transaksi) + ' · ' + S.judulTx(t), v: (masuk ? '+' : '\u2212') + U.rp(t.nominal), kelas: masuk ? 't-in' : 't-out' };
+      });
+  };
+  const PINDAH_Q = {
+    nabung: { judul: '🐷 Nabung', f: (t, tp) => tp(t.id_dompet_tujuan) === 'TABUNGAN' || /\bnabung\b/i.test(t.keterangan || '') },
+    ambiltab: { judul: '🐷 Ambil tabungan', f: (t, tp) => tp(t.id_dompet) === 'TABUNGAN' },
+    topup: { judul: '📱 Top up', f: (t, tp) => tp(t.id_dompet_tujuan) === 'EWALLET' },
+    tarik: { judul: '🏧 Tarik tunai', f: (t, tp) => tp(t.id_dompet_tujuan) === 'TUNAI' && tp(t.id_dompet) === 'REKENING' },
+    setor: { judul: '🏦 Setor tunai', f: (t, tp) => tp(t.id_dompet) === 'TUNAI' && tp(t.id_dompet_tujuan) === 'REKENING' },
+    semua: { judul: '🔄 Pindah saldo', f: () => true }
+  };
+  Chat.jawabPindah = function (it, per, orang, namaOrang, kor) {
+    const def = PINDAH_Q[it.pindah] || PINDAH_Q.semua;
+    const tp = (id) => (S.dompet(id) || {}).tipe;
+    const list = S.txTerlihat({ mulai: per.mulai, sampai: per.sampai, orang, jenis: 'PINDAH' }).filter((t) => def.f(t, tp))
+      .sort((a, b) => (b.tanggal_transaksi + b.waktu_catat).localeCompare(a.tanggal_transaksi + a.waktu_catat));
+    const total = list.reduce((a, t) => a + t.nominal, 0);
+    const judul = def.judul + ' · ' + per.label + namaOrang;
+    if (!list.length) return Chat.tambah({ kind: 'ringkasan', data: { judul, total: U.rp(0), catatan: 'Belum ada catatan ' + def.judul.slice(3).toLowerCase() + ' ' + per.label.toLowerCase() + '. ' + kor } });
+    let caption = '**' + list.length + ' kali**';
+    if (it.pindah === 'nabung' || it.pindah === 'ambiltab') {
+      const tab = S.saldoDompet().filter((x) => x.dompet.tipe === 'TABUNGAN').reduce((a, x) => a + x.saldo, 0);
+      caption += ' · saldo Tabungan sekarang **' + U.rp(tab) + '**';
+    }
+    return Chat.tambah({ kind: 'ringkasan', data: { judul, total: U.rp(total), kelasTotal: 't-tr', caption,
+      baris: list.slice(0, 5).map((t) => ({ l: U.tglPendek(t.tanggal_transaksi) + ' · ' + S.namaDompet(t.id_dompet) + ' → ' + S.namaDompet(t.id_dompet_tujuan), v: U.rp(t.nominal) })),
+      catatan: (list.length > 5 ? '…dan ' + (list.length - 5) + ' lainnya. ' : '') + kor } });
+  };
+  Chat.jawabTerakhir = function (it, orang, namaOrang, kor) {
+    const k = S.kat(it.kategori);
+    let list = S.txTerlihat({ orang }).filter((t) => t.jenis !== 'PINDAH' && t.jenis !== 'SALDO' && t.id_kategori === it.kategori);
+    const spes = list.filter((t) => cocokKata(t, it.kata));
+    if (spes.length) list = spes;
+    list.sort((a, b) => (b.tanggal_transaksi + b.waktu_catat).localeCompare(a.tanggal_transaksi + a.waktu_catat));
+    const judul = '🕒 Terakhir ' + it.kata + namaOrang;
+    if (!list.length) return Chat.tambah({ kind: 'ringkasan', data: { judul, catatan: 'Belum ada catatan “' + it.kata + '”. ' + kor } });
+    const t0 = list[0], hr = Math.round((U.parseTgl(U.hariIni()) - U.parseTgl(t0.tanggal_transaksi)) / 86400000);
+    return Chat.tambah({ kind: 'ringkasan', data: { judul, total: U.labelHari(t0.tanggal_transaksi).replace(/ · .*$/, '') === 'Hari ini' ? 'Hari ini' : U.tglPanjang(t0.tanggal_transaksi),
+      caption: (hr === 0 ? 'hari ini' : hr === 1 ? 'kemarin' : hr + ' hari lalu') + ' · **' + t0.keterangan + ' ' + U.rp(t0.nominal) + '**' + (S.lihatSemua() && t0.id_pengguna !== S.saya.id ? ' · ' + S.orang(t0.id_pengguna).nama : '') + (S.fiturDompet() && t0.id_dompet ? ' · ' + S.namaDompet(t0.id_dompet) : ''),
+      baris: list.slice(1, 4).map((t) => ({ l: 'Sebelumnya · ' + U.tglPendek(t.tanggal_transaksi), v: U.rp(t.nominal) })),
+      catatan: kor } });
+  };
+
   Chat.jawabTanya = async function (it) {
     if (it.periodeError) {
       const pe = it.periodeError;
@@ -976,7 +1026,7 @@
     }
     const f = { mulai: per.mulai, sampai: per.sampai, orang };
     const namaOrang = orang ? (orang === S.saya.id ? ' (saya)' : ' · ' + S.orang(orang).nama) : '';
-    const kor = catatanKoreksi(it);
+    let kor = catatanKoreksi(it);
 
     if (it.metric === 'saldo') {
       if (!S.fiturDompet()) return Chat.sistem('Fitur dompet sedang dinonaktifkan Admin, jadi saldo per dompet tidak dihitung.');
@@ -985,9 +1035,12 @@
       if (!s.length) return Chat.sistem('Belum ada dompet yang bisa kamu lihat saldonya.');
       const total = s.reduce((a, x) => a + x.saldo, 0);
       return Chat.tambah({ kind: 'ringkasan', data: { judul: it.dompet ? 'Saldo ' + s[0].dompet.nama : '💳 Saldo semua dompet', total: (total < 0 ? '−' : '') + U.rp(total), kelasTotal: total < 0 ? 't-out' : '',
-        baris: it.dompet ? [] : s.map((x) => ({ l: (x.dompet.ikon || '') + ' ' + x.dompet.nama, v: (x.saldo < 0 ? '−' : '') + U.rp(x.saldo), kelas: x.saldo < 0 ? 't-out' : '' })),
+        caption: it.dompet ? 'Per ' + U.tglPanjang(U.hariIni()) + (it.dompet && s[0].dompet.tipe === 'TABUNGAN' ? ' · uang yang disisihkan' : '') : undefined,
+        baris: it.dompet ? Chat.gerakDompet(it.dompet, 3) : s.map((x) => ({ l: (x.dompet.ikon || '') + ' ' + x.dompet.nama, v: (x.saldo < 0 ? '−' : '') + U.rp(x.saldo), kelas: x.saldo < 0 ? 't-out' : '' })),
         catatan: (g.Sync.status !== 'ok' ? 'Data per ' + U.relatif(S.meta.lastSync) + '. ' : '') + kor } });
     }
+    if (it.metric === 'pindah') return Chat.jawabPindah(it, per, orang, namaOrang, kor);
+    if (it.metric === 'terakhir') return Chat.jawabTerakhir(it, orang, namaOrang, kor);
     if (it.metric === 'anggaran') {
       let st = S.statusAnggaran(per.mulai);
       if (it.kategori) st = st.filter((x) => x.a.id_kategori === it.kategori);
@@ -1002,6 +1055,22 @@
     if (it.metric === 'ekstrem') return Chat.jawabEkstrem(it, per, orang, namaOrang, kor);
     if (it.metric === 'rata') return Chat.jawabRata(it, orang, namaOrang, kor);
     const r = S.ringkasan(f);
+    if (it.metric === 'kategori' && it.kata) {
+      // kata spesifik ("listrik", "kopi", "bensin"): hanya transaksi yang menyebut kata itu
+      const k = S.kat(it.kategori);
+      const semuaKat = r.list.filter((t) => t.id_kategori === it.kategori);
+      const cocok = semuaKat.filter((t) => cocokKata(t, it.kata));
+      if (cocok.length) {
+        const total = cocok.reduce((a, t) => a + t.nominal, 0);
+        const urut = cocok.slice().sort((a, b) => (b.tanggal_transaksi + b.waktu_catat).localeCompare(a.tanggal_transaksi + a.waktu_catat));
+        return Chat.tambah({ kind: 'ringkasan', data: { judul: k.ikon + ' ' + U.huruf1(it.kata) + ' · ' + per.label + namaOrang, total: U.rp(total), kelasTotal: k.jenis === 'MASUK' ? 't-in' : 't-out',
+          caption: '**' + cocok.length + ' kali**' + (cocok.length > 1 ? ' · rata-rata ' + U.rp(Math.round(total / cocok.length)) : '') + ' · kategori ' + k.nama,
+          baris: urut.slice(0, 5).map((t) => ({ l: U.tglPendek(t.tanggal_transaksi) + ' · ' + t.keterangan + (S.lihatSemua() && t.id_pengguna !== S.saya.id ? ' · ' + S.orang(t.id_pengguna).nama : ''), v: U.rp(t.nominal) })),
+          catatan: (urut.length > 5 ? '…dan ' + (urut.length - 5) + ' lainnya. ' : '') + kor } });
+      }
+      if (!semuaKat.length) return Chat.tambah({ kind: 'ringkasan', data: { judul: k.ikon + ' ' + U.huruf1(it.kata) + ' · ' + per.label + namaOrang, catatan: 'Tidak ada catatan “' + it.kata + '” ' + per.label.toLowerCase() + '. ' + kor } });
+      kor += 'Tidak ada catatan “' + it.kata + '”, jadi ini total kategori ' + k.nama + '. ';
+    }
     if (it.metric === 'kategori' || (it.metric === 'masuk' && it.kategori)) {
       const k = S.kat(it.kategori);
       const list = r.list.filter((t) => t.id_kategori === it.kategori);

@@ -112,6 +112,11 @@ Claude akan memandu tahap ini satu per satu di percakapan.
 | `pengeluaran terbesar hari ini` · `… dua hari ini` · `… 3 hari terakhir` · `… seminggu terakhir` · `… bulan ini` · `… tahun ini` | 5 pengeluaran terbesar pada periode itu |
 | `kategori pengeluaran terbesar bulan ini` · `hari paling boros minggu ini` · `siapa yang paling boros bulan ini` | Peringkat per kategori / per hari / per anggota |
 | `rata-rata pengeluaran per hari` · `… per minggu` · `… per bulan` · `… per tahun` · `rata-rata jajan per hari bulan ini` | Rata-rata + perbandingan dengan hari/minggu/bulan berjalan |
+| `berapa tabungan sekarang` · `uang di rekening berapa` · `tunai tinggal berapa` | Saldo dompet itu + 3 gerakan terakhir |
+| `nabung bulan ini berapa` · `bulan kemarin nabung berapa` · `top up gopay bulan ini` · `tarik tunai bulan lalu` | Total pindah saldo pada periode itu |
+| `gaji bulan september masuk berapa` · `bayar listrik bulan oktober berapa` · `berapa kali beli kopi bulan ini` | Riwayat per kata/kategori (listrik saja, bukan semua tagihan) |
+| `kapan terakhir beli bensin` | Tanggal & nominal terakhir |
+| `listrik 350rb tanggal 5 oktober` · `bensin 20rb 3 okt` | Mencatat transaksi di tanggal lampau |
 | `checkout shopee 150rb` · `beli baju di lazada 120rb` · `ongkir 15rb` | Kategori **Belanja Online** |
 | `bayar qris 25rb` | CashKu bertanya: dari Rekening atau E-Wallet (yang ada saldonya; bila hanya satu, langsung dipakai) |
 | `unduh laporan bulan ini` · `laporan maret 2026` · `laporan tahun 2025` | Kartu laporan + tombol Unduh PDF |
