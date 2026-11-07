@@ -124,7 +124,7 @@
       Alarm.tutup(true);
       const p0 = list[0];
       const el = U.el('<div class="alarm-layar" role="alertdialog" aria-live="assertive"><div class="alarm-kartu">' +
-        '<div class="alarm-ikon">⏰</div><div class="alarm-sub">Pengingat · ' + U.esc(Jadwal.waktuLabel(p0.berikutnya).split(' · ')[1] || '') + '</div>' +
+        '<div class="alarm-ikon">⏰</div><div class="alarm-sub">' + (g.S && g.S.saya && g.S.saya.panggilan ? U.esc(g.S.sapa()) + ', waktunya' : 'Pengingat') + ' · ' + U.esc(Jadwal.waktuLabel(p0.berikutnya).split(' · ')[1] || '') + '</div>' +
         list.map((p) => '<div class="alarm-judul">' + U.esc(p.judul) + '</div>').join('') +
         '<div class="alarm-ket">' + U.esc(Jadwal.label(p0)) + '</div>' +
         '<div class="alarm-tombol"><button class="btn block lg" data-selesai>Selesai</button><button class="btn block soft" data-tunda>Tunda ' + Alarm.menitTunda() + ' menit</button></div></div></div>');

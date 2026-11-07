@@ -516,7 +516,7 @@
         if (v === 'reset') resetPassword(a);
         if (v === 'aktif') {
           if (a.aktif !== false && !(await UI.Sheet.konfirmasi({ judul: 'Nonaktifkan ' + a.nama + '?', isi: a.nama + ' tidak bisa masuk lagi sampai diaktifkan. Catatannya tetap tersimpan.', ok: 'Nonaktifkan', bahaya: true }))) return;
-          const res = await panggilOnline('penggunaSimpan', { id: a.id, username: a.username, nama_tampilan: a.nama, peran: a.peran, izin_lihat: a.izin_lihat, id_dompet_default: a.id_dompet_default, aktif: a.aktif === false });
+          const res = await panggilOnline('penggunaSimpan', { id: a.id, username: a.username, nama_tampilan: a.nama, peran: a.peran, izin_lihat: a.izin_lihat, id_dompet_default: a.id_dompet_default, aktif: a.aktif === false, hubungan: a.hubungan || '' });
           if (res && res.success) { UI.Router.segarkan(); UI.Toast.show(a.aktif === false ? 'Anggota diaktifkan' : 'Anggota dinonaktifkan', 'success'); }
         }
       });
@@ -537,6 +537,7 @@
       '<label class="field"><span class="lbl">Username <span class="hint">Digunakan untuk login</span></span><div class="input-wrap"><span class="pre" style="font-size:16px">@</span><input class="input" data-user maxlength="20" autocapitalize="off" autocomplete="off" value="' + U.esc(st.username || '') + '"></div><div data-uerr></div></label>' +
       (id ? '' : '<label class="field"><span class="lbl">Password awal</span><div class="input-wrap"><input class="input has-end" style="padding-left:14px" type="password" data-pw autocomplete="new-password"><button class="end" type="button" data-eye aria-label="Tampilkan password">' + ic('eye') + '</button></div><p class="help">Anggota dapat menggantinya nanti di profil</p></label>') +
       '<span class="lbl" style="margin-top:16px">Peran dalam keluarga</span><div class="seg fill" data-peran><button data-v="ADMIN">Admin</button><button data-v="DEWASA">Dewasa</button><button data-v="ANAK">' + ic('smile', 'ic-sm') + 'Anak</button></div>' +
+      '<span class="lbl" style="margin-top:16px">Dipanggil <span class="hint">Untuk sapaan di chat</span></span><div class="seg fill" data-hub><button data-v="SUAMI">Pak</button><button data-v="ISTRI">Bu</button><button data-v="ANAK">Nama saja</button><button data-v="">Tanya</button></div>' +
       '<div class="card" style="margin-top:16px;background:var(--info-bg);border:0" data-izinbox><div class="row" style="margin-bottom:12px">' + ic('lock-open') + '<b style="font-weight:500">Izin akses transaksi</b></div>' +
       '<label class="radio-card"><input type="radio" name="izin" value="SEMUA"' + (st.izin_lihat === 'SEMUA' ? ' checked' : '') + '><span><b>Semua transaksi keluarga</b><span class="small muted">Dapat melihat catatan belanja orang tua</span></span></label>' +
       '<label class="radio-card"><input type="radio" name="izin" value="SENDIRI"' + (st.izin_lihat !== 'SEMUA' ? ' checked' : '') + '><span><b>Milik sendiri saja</b><span class="small muted">Hanya melihat uang saku dan jajan pribadi</span></span></label></div>' +
@@ -545,10 +546,12 @@
     const el = sh.el;
     const gambar = () => {
       U.$$('[data-peran] button', el).forEach((b) => b.classList.toggle('on', b.dataset.v === st.peran));
+      U.$$('[data-hub] button', el).forEach((b) => b.classList.toggle('on', b.dataset.v === (st.hubungan || (st.peran === 'ANAK' ? 'ANAK' : ''))));
       el.querySelector('[data-izinbox]').hidden = st.peran !== 'ANAK';
     };
     gambar();
     el.querySelector('[data-peran]').onclick = (e) => { const b = e.target.closest('button'); if (b) { st.peran = b.dataset.v; gambar(); } };
+    el.querySelector('[data-hub]').onclick = (e) => { const b = e.target.closest('button'); if (b) { st.hubungan = b.dataset.v; gambar(); } };
     el.querySelector('[data-x2]').onclick = () => sh.close();
     const eye = el.querySelector('[data-eye]');
     if (eye) eye.onclick = () => { const p = el.querySelector('[data-pw]'); p.type = p.type === 'password' ? 'text' : 'password'; eye.innerHTML = ic(p.type === 'password' ? 'eye' : 'eye-off'); };
@@ -564,7 +567,7 @@
       if (pw && pw.value.length < 6) return UI.Toast.show('Password awal minimal 6 karakter', 'error');
       const izin = (el.querySelector('input[name="izin"]:checked') || {}).value || 'SENDIRI';
       const dm = el.querySelector('[data-dompet]');
-      const res = await panggilOnline('penggunaSimpan', { id: id || '', nama_tampilan: nama, username, peran: st.peran, izin_lihat: izin, id_dompet_default: dm ? dm.value : '', password: pw ? pw.value : undefined, aktif: st.aktif !== false }, e.currentTarget);
+      const res = await panggilOnline('penggunaSimpan', { id: id || '', nama_tampilan: nama, username, peran: st.peran, izin_lihat: izin, id_dompet_default: dm ? dm.value : '', password: pw ? pw.value : undefined, aktif: st.aktif !== false, hubungan: st.hubungan || '' }, e.currentTarget);
       if (!res) return;
       if (!res.success) {
         if (res.data && /USERNAME/.test(res.data.code || '')) { uinp.classList.add('err'); el.querySelector('[data-uerr]').innerHTML = '<div class="err-msg">' + ic('circle-x', 'ic-sm') + U.esc(res.message) + '</div>'; }

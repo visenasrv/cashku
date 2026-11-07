@@ -2,7 +2,7 @@
 /* global importScripts, self, caches, indexedDB, clients */
 importScripts('js/config.js');
 
-const VERSI = 'cashku-1.0.12';
+const VERSI = 'cashku-1.0.13';
 const ASET = [
   './', 'index.html', 'manifest.webmanifest', 'css/style.css',
   'js/config.js', 'js/icons.js', 'js/util.js', 'js/db.js', 'js/api.js', 'js/state.js', 'js/parser.js', 'js/sync.js',
@@ -124,7 +124,7 @@ async function tanganiPush() {
   if (terlihat && !d.uji && d.list.length) { wins.forEach((w) => w.postMessage({ type: 'alarm' })); return; }   // alarm berbunyi di layar aplikasi
   const list = d.list.length ? d.list : [{ id: d.uji ? 'uji' : 'umum', judul: d.uji ? 'Tes alarm CashKu berhasil 🎉' : 'Ada pengingat dari CashKu' }];
   await Promise.all(list.map((p) => self.registration.showNotification('⏰ ' + p.judul, {
-    body: p.id === 'uji' ? 'Alarm & notifikasi sudah aktif di HP ini.' : 'Ketuk untuk membuka CashKu' + (p.jam ? ' · ' + String(p.jam).replace(':', '.') : ''),
+    body: p.id === 'uji' ? 'Alarm & notifikasi sudah aktif di HP ini.' : (d.sapa ? d.sapa + ', waktunya ini. ' : '') + 'Ketuk untuk membuka CashKu' + (p.jam ? ' · ' + String(p.jam).replace(':', '.') : ''),
     tag: 'pengingat-' + p.id, renotify: true, requireInteraction: true, silent: false,
     vibrate: [900, 300, 900, 300, 900, 300, 900, 300, 900, 300, 900],
     icon: 'icons/icon-192.png', badge: 'icons/favicon-64.png', timestamp: p.berikutnya || Date.now(),

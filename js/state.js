@@ -54,7 +54,7 @@
 
   S.keluar = async function () {
     S.token = ''; S.saya = null; S.tx = new Map(); S.outbox = new Map(); S.chat = [];
-    S.master = { kategori: [], kamus: [], dompet: [], anggaran: [], usulan: [], pengaturan: {}, anggota: [], typo: [], aturan: {}, ingatan: [], pengingat: [] };
+    S.master = { kategori: [], kamus: [], dompet: [], anggaran: [], usulan: [], pengaturan: {}, anggota: [], typo: [], aturan: {}, ingatan: [], pengingat: [], alias: [] };
     S.meta = { verMaster: '', sejak: 0, jendelaMulai: '', basisSaldo: {}, lastSync: 0, warn: {} };
     await g.DB.clearAll();
   };
@@ -105,8 +105,35 @@
       saya: S.saya, fiturDompet: S.fiturDompet(), hariIni: U.hariIni(),
       kategoriDefaultKeluar: S.kategoriDefault('KELUAR'), kategoriDefaultMasuk: S.kategoriDefault('MASUK'),
       riwayat: S.riwayatKata,
-      typo: S.master.typo || [], aturan: S.master.aturan || {}, ingatan: S.ingatanSaya()
+      typo: S.master.typo || [], aturan: S.master.aturan || {}, ingatan: S.ingatanSaya(), aliasCatatan: S.master.alias || []
     };
+  };
+  /** Sapaan: 'Pak' / 'Bu' / '' (nama saja) / sapaan pilihan sendiri; null = belum diketahui (perlu ditanya sekali) */
+  S.hormat = function (u) {
+    u = u || S.saya || {};
+    if (u.sapaan) return u.sapaan === 'NAMA' ? '' : u.sapaan;
+    const h = String(u.hubungan || '').toUpperCase();
+    if (h === 'SUAMI') return 'Pak';
+    if (h === 'ISTRI') return 'Bu';
+    if (h === 'ANAK' || u.peran === 'ANAK') return '';
+    return null;
+  };
+  /** "Pak Dani", "Bu Sinta", "Ibu" (tanpa nama), "Rafi" (anak) */
+  S.sapa = function (u) {
+    u = u || S.saya || {};
+    const n = String(u.panggilan || '').trim(), h = S.hormat(u);
+    if (h === null) return n || u.nama || '';
+    if (!n) return h === 'Bu' ? 'Ibu' : h === 'Pak' ? 'Bapak' : (u.nama || '');
+    return h ? h + ' ' + n : n;
+  };
+  /** Simpan panggilan/sapaan sendiri (jalan offline, dikirim saat online) */
+  S.simpanSapaan = async function (patch) {
+    S.saya = Object.assign({}, S.saya, patch);
+    const a = (S.master.anggota || []).find((x) => x.id === S.saya.id);
+    if (a) Object.assign(a, patch);
+    await S.simpanSesi();
+    const lama = S.outbox.get('profil:' + S.saya.id);
+    await S.antre('profil.put', Object.assign({}, lama ? lama.data : {}, patch), 'profil:' + S.saya.id);
   };
   /** Ingatan data yang boleh dilihat: milik sendiri + yang dibagikan ke keluarga */
   S.ingatanSaya = function () {
@@ -256,6 +283,10 @@
         const nb = J.berikutnya(p, Math.max(x.berikutnya || 0, Date.now()) + 1000);
         if (nb) p.berikutnya = nb; else p.status = 'SELESAI';
       }
+    } else if (op.type === 'profil.put') {
+      if (S.saya) Object.assign(S.saya, x);
+      const a = (m.anggota || []).find((e) => S.saya && e.id === S.saya.id);
+      if (a) Object.assign(a, x);
     } else if (op.type === 'usulan.putuskan') {
       const u = m.usulan.find((e) => e.id_usulan === x.id_usulan);
       if (u) {
@@ -283,8 +314,12 @@
   S.gantiMasterDariServer = async function (master, saya) {
     S.master = master;
     // Perubahan master lokal yang belum terkirim diterapkan lagi di atas data server
-    Array.from(S.outbox.values()).filter((o) => /^(kamus|kategori|anggaran|usulan|typo|ingatan|pengingat)\./.test(o.type)).forEach((o) => S.terapkanOpMaster(o));
-    if (saya) { S.saya = Object.assign({}, S.saya, saya); await S.simpanSesi(); }
+    Array.from(S.outbox.values()).filter((o) => /^(kamus|kategori|anggaran|usulan|typo|ingatan|pengingat|profil)\./.test(o.type)).forEach((o) => S.terapkanOpMaster(o));
+    if (saya) {
+      S.saya = Object.assign({}, S.saya, saya);
+      Array.from(S.outbox.values()).filter((o) => o.type === 'profil.put').forEach((o) => Object.assign(S.saya, o.data));
+      await S.simpanSesi();
+    }
     S._peta = null;
     await S.simpanMaster();
     S.emit('master');

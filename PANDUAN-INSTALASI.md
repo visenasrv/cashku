@@ -135,6 +135,16 @@ Claude akan memandu tahap ini satu per satu di percakapan.
 | `kopi 25` | Nominal tidak ditebak — ditanyakan *Rp25.000?* |
 | `tolong ingat nomor listrik saya 1234567890` · `simpan no rek bca saya 0123 a.n. Dani` · `ingat password wifi: rahasia123` | *“Oke, akan aku ingat 👍”* — data apa pun bisa diingat (sheet **Ingatan**). Tambah `untuk keluarga` agar anggota lain bisa melihat |
 | `no pln saya berapa` · `nomor rekening bca` · `apa saja yang kamu ingat` · `hapus nomor listrik` | Menanyakan, melihat semua, atau menghapus data yang diingat |
+| `rek istri` · `istri bri rek` · `no listrik` · `pln` · `token` | **Catatan dicari longgar:** urutan kata bebas, kata sambung (*punya, milik, atas nama, yang, si*) diabaikan, singkatan & salah ketik dimaklumi (`rek` = rekening, `pln` = `listrik` = `token`, `hp` = telepon). Satu hasil → langsung dijawab + tombol **Salin** |
+| `rekening bri` · `rek` | Bila ada beberapa catatan (misalnya milik istri & Vicky) → *“Rekening BRI yang mana?”* dengan tombol **istri · vicky · Tampilkan semua** (boleh juga diketik) |
+| `rekening bca` (belum disimpan) | *“Belum ada catatan tentang Rekening BCA. Mau saya simpan?”* + catatan yang mirip |
+| `ingat rek bri istri 9999` (sudah ada) | *“…sudah ada. Mau diganti atau disimpan sebagai tambahan?”* |
+| `ingat rekening bri 5555` (pemilik tidak disebut) | Bila ada rekening BRI milik orang lain → *“Rekening BRI ini milik siapa?”* |
+| `semua rekening` · `daftar catatan` · `catatan apa saja` | Daftar catatan (semua, atau satu jenis) |
+| `ganti rek bri istri jadi 5555` · `hapus catatan pln` | Mengubah / menghapus catatan |
+| `bayar air tanggal 20 jam 9 ingatkan saya` · `ingetin bayar listrik besok jam 7` · `pengingat bayar air hapus` | Perintah pengingat boleh di mana saja dalam kalimat & boleh salah ketik |
+| `saya Dani` · `nama saya Dani` · `namaku Sinta` · `panggil aku Rafi` | CashKu memanggil sesuai peran: suami → *“Baik, Pak Dani.”*, istri → *“Baik, Bu Sinta.”*, anak → *“Baik, Rafi.”*. Bila peran belum jelas, CashKu bertanya sekali *“Saya panggil Bapak atau Ibu?”* |
+| `panggil saya Bang Dani` · `panggil saya Dani saja` · `siapa nama saya` | Sapaan pilihan sendiri, tanpa Pak/Bu, atau menanyakan nama panggilan |
 | `ingatkan saya bayar air setiap tanggal 20 jam 9` | Pengingat bulanan + alarm/notifikasi HP |
 | `ingatkan bayar listrik tanggal 27 November` | CashKu bertanya: *diulang setiap tanggal 27* atau *27 November saja*, lalu bertanya jamnya |
 | `ingatkan minum obat tiap hari jam 7 malam` · `ingatkan setiap senin jam 6 buang sampah` · `ingatkan 30 menit lagi angkat jemuran` · `ingatkan bayar kos setiap akhir bulan jam 10` | Pengingat harian, mingguan, sekali, akhir bulan, tahunan |
@@ -153,6 +163,17 @@ Claude akan memandu tahap ini satu per satu di percakapan.
 
 ## Memperbarui aplikasi
 
+> **Pembaruan 1.0.13 (catatan fleksibel, pengingat urutan bebas, sapaan nama)** — **server dan tampilan** berubah:
+> 1. Apps Script → ganti seluruh isi `Kode.gs` dengan yang baru → **Simpan**.
+> 2. Pilih fungsi **`migrasiData`** → **Jalankan** (sekali). Hasilnya: sheet baru **Alias_Catatan** (daftar singkatan: `rek` → rekening, `pln`/`listrik`/`token`, `hp` → telepon, nama bank, pemilik) dan **Log_Pengaturan**, serta kolom baru di ujung kanan: **Ingatan** (`jenis`, `lembaga`, `pemilik`) dan **Pengguna** (`panggilan`, `sapaan`, `hubungan`). Data lama tidak diubah. Bila lupa, migrasi tetap berjalan otomatis saat aplikasi sinkron.
+> 3. **Deploy → Manage deployments → Edit → Version: New version → Deploy**.
+> 4. Unggah ulang tampilan ke GitHub.
+> 5. (Opsional) **Pengaturan → Anggota keluarga → ubah anggota → Dipanggil: Pak / Bu / Nama saja**. Bila dibiarkan *Tanya*, CashKu bertanya sekali di chat.
+>
+> **Menambah singkatan sendiri:** tambahkan baris di sheet **Alias_Catatan**, misalnya `alias` = `nyonya`, `kata` = `istri`, `kelompok` = `PEMILIK`. Kelompok: `JENIS` (rekening, pln, telepon…), `LEMBAGA` (bank/e-wallet), `PEMILIK` (istri, ayah…), `UMUM` (kata yang boleh tidak disebut, seperti *nomor*). Terbaca HP setelah sinkron berikutnya.
+>
+> **Privasi:** isi catatan dan pertanyaan tentang catatan **tidak** masuk log *pesan tidak dikenali* (Log_Aktivitas); angka di pesan lain ditulis `###`.
+>
 > **Pembaruan 1.0.12 (paham typo, ingatan data, pengingat & alarm)** — kali ini **server juga berubah**:
 > 1. Buka Apps Script → ganti seluruh isi `Kode.gs` dengan berkas `Kode.gs` yang baru → **Simpan**.
 > 2. Pilih fungsi **`pasangPengingat`** → **Jalankan**. Google akan meminta izin baru (*menghubungkan ke layanan eksternal* untuk mengirim notifikasi HP, dan *menjalankan pemicu*) → **Izinkan**. Di log muncul *✅ Pemicu pengingat terpasang*. Fungsi ini juga otomatis membuat 5 sheet baru: **Kamus_Typo**, **Aturan_Parser**, **Ingatan**, **Pengingat**, **Langganan_Push**.
