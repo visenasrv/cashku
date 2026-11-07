@@ -446,3 +446,15 @@ label.btn.sibuk { opacity: .6; pointer-events: none; }
 .spin-sm { width: 14px; height: 14px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: spin .7s linear infinite; flex: none; display: inline-block; }
 
 .seg.seg-4 button { font-size: 13px; padding-left: 4px; padding-right: 4px; white-space: nowrap; }
+
+/* ---------- Alarm pengingat (1.0.12) ---------- */
+.alarm-layar { position: fixed; inset: 0; z-index: 200; background: rgba(11, 20, 26, .72); display: flex; align-items: center; justify-content: center; padding: 24px; -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); animation: alarmMasuk .2s ease-out; }
+.alarm-kartu { width: 100%; max-width: 360px; background: var(--card); color: var(--text); border-radius: 24px; padding: 28px 22px 20px; text-align: center; box-shadow: 0 20px 60px rgba(0, 0, 0, .35); }
+.alarm-ikon { font-size: 60px; line-height: 1; display: inline-block; animation: alarmGoyang .45s ease-in-out infinite alternate; transform-origin: 50% 70%; }
+.alarm-sub { margin-top: 12px; color: var(--muted); font-size: 13px; letter-spacing: .02em; }
+.alarm-judul { font-size: 22px; line-height: 28px; font-weight: 700; margin-top: 6px; }
+.alarm-ket { color: var(--muted); font-size: 13px; margin: 8px 0 20px; }
+.alarm-tombol { display: grid; gap: 10px; }
+@keyframes alarmGoyang { from { transform: rotate(-14deg); } to { transform: rotate(14deg); } }
+@keyframes alarmMasuk { from { opacity: 0; transform: scale(.97); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .alarm-ikon, .alarm-layar { animation: none; } }

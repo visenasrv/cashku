@@ -34,6 +34,12 @@
         const m = e.target.closest('[data-tema] button[data-v]');
         if (m) { UI.Tema.setMode(m.dataset.v); render(el); return; }
         if (e.target.closest('[data-pasang]')) { g.App.pasang(); return; }
+        if (e.target.closest('[data-notif-aktif]')) { const r = await g.Pengingat.Notif.aktifkan(); UI.Toast.show(r.ok ? 'Alarm aktif' : 'Alarm belum aktif', r.ok ? 'success' : 'warn', r.pesan); render(el); return; }
+        if (e.target.closest('[data-notif-uji]')) { const r = await g.Pengingat.Notif.uji(); UI.Toast.show(r.ok ? 'Tes terkirim' : 'Tes gagal', r.ok ? 'success' : 'warn', r.pesan); return; }
+        const hp = e.target.closest('[data-pgn-hapus]');
+        if (hp) { const ok = await UI.Sheet.konfirmasi({ judul: 'Hapus pengingat?', isi: hp.dataset.judul, ok: 'Hapus', bahaya: true }); if (ok) { await S.ubahMaster('pengingat.del', { id_pengingat: hp.dataset.pgnHapus }); render(el); } return; }
+        const hi = e.target.closest('[data-ing-hapus]');
+        if (hi) { const ok = await UI.Sheet.konfirmasi({ judul: 'Hapus data ini dari ingatan?', isi: hi.dataset.judul, ok: 'Hapus', bahaya: true }); if (ok) { await S.ubahMaster('ingatan.del', { id_ingatan: hi.dataset.ingHapus }); render(el); } return; }
         if (e.target.closest('[data-keluar]')) { g.App.keluar(); return; }
         if (e.target.closest('[data-sinkron]')) { await g.Sync.sekarang({ paksaMaster: true }); render(el); UI.Toast.show(g.Sync.status === 'ok' ? 'Tersinkron' : 'Belum tersinkron', g.Sync.status === 'ok' ? 'success' : 'warn', g.Sync.pesanError || ''); }
       });
@@ -105,6 +111,24 @@
       '<div class="grow"><div class="row" style="gap:8px;flex-wrap:wrap"><label class="btn sm soft" data-latar-pilih>' + ic('image-plus', 'ic-sm') + 'Pilih dari galeri<input type="file" accept="image/*" data-latar-file hidden></label>' +
       (L.url ? '<button class="btn sm ghost" data-latar-hapus>Pakai bawaan</button>' : '') + '</div>' +
       '<p class="small muted" style="margin:8px 0 0">Gambar hanya tersimpan di HP ini, tidak dikirim ke server atau database.</p></div></div>' : '') + '</div>';
+
+    // Pengingat & alarm + data yang diingat
+    const PG = g.Pengingat;
+    if (PG) {
+      const J = PG.Jadwal, nst = PG.Notif.status();
+      const pg = (S.master.pengingat || []).filter((p) => p.id_pengguna === s.id && p.status === 'AKTIF').sort((a, b) => (a.berikutnya || 0) - (b.berikutnya || 0));
+      h += '<div class="sec">Pengingat & alarm</div><div class="card"><div class="row" style="gap:12px;align-items:flex-start"><span class="ico-c sm">' + ic('bell-ring', 'ic-sm') + '</span>' +
+        '<div class="grow"><b style="font-weight:500;display:block">Alarm di HP ini</b><span class="small ' + (nst === 'aktif' ? 't-in' : 'muted') + '">' + U.esc(PG.Notif.pesanStatus()) + '</span>' +
+        '<div class="row" style="gap:8px;margin-top:10px;flex-wrap:wrap">' + (nst === 'aktif' ? '<button class="btn sm soft" data-notif-uji>' + ic('bell-ring', 'ic-sm') + 'Tes alarm</button>' : (nst === 'belum' ? '<button class="btn sm" data-notif-aktif>' + ic('bell-ring', 'ic-sm') + 'Aktifkan alarm</button>' : '')) + '</div></div></div>' +
+        (pg.length ? '<div class="hr"></div>' + pg.map((p) => '<div class="row" style="gap:10px;padding:6px 0"><span class="ico-c sm">' + ic('clock', 'ic-sm') + '</span><span class="grow"><b style="font-weight:500;display:block">' + U.esc(p.judul) + '</b><span class="small muted">' + U.esc(J.label(p)) + '</span></span>' +
+          '<button class="hbtn" style="color:var(--muted)" data-pgn-hapus="' + U.esc(p.id_pengingat) + '" data-judul="' + U.esc(p.judul) + '" aria-label="Hapus">' + ic('trash-2', 'ic-sm') + '</button></div>').join('')
+          : '<p class="small muted" style="margin:12px 0 0">Belum ada pengingat. Ketik di chat, misalnya <b>ingatkan saya bayar air setiap tanggal 20 jam 9</b>.</p>') + '</div>';
+      const ing = S.ingatanSaya();
+      if (ing.length) {
+        h += '<div class="sec">Data yang diingat</div><div class="card">' + ing.map((x) => '<div class="row" style="gap:10px;padding:6px 0"><span class="ico-c sm">' + ic('key', 'ic-sm') + '</span><span class="grow" style="min-width:0"><b style="font-weight:500;display:block">' + U.esc(U.huruf1(x.label)) + (x.lingkup === 'KELUARGA' ? ' <span class="badge b-blue">keluarga</span>' : '') + '</b><span class="small muted ellip" style="display:block">' + U.esc(x.nilai) + '</span></span>' +
+          (x.id_pengguna === s.id || S.isAdmin() ? '<button class="hbtn" style="color:var(--muted)" data-ing-hapus="' + U.esc(x.id_ingatan) + '" data-judul="' + U.esc(x.label + ': ' + x.nilai) + '" aria-label="Hapus">' + ic('trash-2', 'ic-sm') + '</button>' : '') + '</div>').join('') + '</div>';
+      }
+    }
 
     if (S.isAdmin() || S.fiturDompet()) {
       h += '<div class="sec">Dompet</div><div class="list-group">';

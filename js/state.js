@@ -54,7 +54,7 @@
 
   S.keluar = async function () {
     S.token = ''; S.saya = null; S.tx = new Map(); S.outbox = new Map(); S.chat = [];
-    S.master = { kategori: [], kamus: [], dompet: [], anggaran: [], usulan: [], pengaturan: {}, anggota: [] };
+    S.master = { kategori: [], kamus: [], dompet: [], anggaran: [], usulan: [], pengaturan: {}, anggota: [], typo: [], aturan: {}, ingatan: [], pengingat: [] };
     S.meta = { verMaster: '', sejak: 0, jendelaMulai: '', basisSaldo: {}, lastSync: 0, warn: {} };
     await g.DB.clearAll();
   };
@@ -100,12 +100,18 @@
   // ---------- Konteks untuk pembaca chat ----------
   S.ctxParser = function () {
     return {
-      versi: S.meta.verMaster + ':' + S.master.kamus.length + ':' + S.master.kategori.length + ':' + S.master.dompet.length,
+      versi: S.meta.verMaster + ':' + S.master.kamus.length + ':' + S.master.kategori.length + ':' + S.master.dompet.length + ':' + (S.master.typo || []).length,
       kategori: S.master.kategori, kamus: S.master.kamus, dompet: S.dompetAktif(), anggota: S.master.anggota,
       saya: S.saya, fiturDompet: S.fiturDompet(), hariIni: U.hariIni(),
       kategoriDefaultKeluar: S.kategoriDefault('KELUAR'), kategoriDefaultMasuk: S.kategoriDefault('MASUK'),
-      riwayat: S.riwayatKata
+      riwayat: S.riwayatKata,
+      typo: S.master.typo || [], aturan: S.master.aturan || {}, ingatan: S.ingatanSaya()
     };
+  };
+  /** Ingatan data yang boleh dilihat: milik sendiri + yang dibagikan ke keluarga */
+  S.ingatanSaya = function () {
+    const id = S.saya && S.saya.id;
+    return (S.master.ingatan || []).filter((x) => x.id_pengguna === id || x.lingkup === 'KELUARGA');
   };
   /** Riwayat nominal per kategori untuk transaksi yang keterangannya memuat kata ini (dipakai untuk menebak kata bermakna ganda) */
   S.riwayatKata = function (kata) {
@@ -225,6 +231,31 @@
       if (a) Object.assign(a, x); else m.anggaran.push(Object.assign({ aktif: true }, x));
     } else if (op.type === 'usulan.put') {
       if (!m.usulan.find((e) => e.id_usulan === x.id_usulan)) m.usulan.push(Object.assign({ status: 'MENUNGGU', id_pengguna: S.saya.id }, x));
+    } else if (op.type === 'typo.put') {
+      m.typo = m.typo || [];
+      const sl = String(x.salah).toLowerCase().trim(), t = m.typo.find((e) => e.salah === sl);
+      if (t) t.benar = x.benar; else m.typo.push({ salah: sl, benar: String(x.benar).toLowerCase().trim() });
+    } else if (op.type === 'ingatan.put') {
+      m.ingatan = m.ingatan || [];
+      const t = m.ingatan.find((e) => e.id_ingatan === x.id_ingatan);
+      if (t) Object.assign(t, x); else m.ingatan.push(Object.assign({ id_pengguna: S.saya.id, lingkup: 'PRIBADI' }, x));
+    } else if (op.type === 'ingatan.del') {
+      m.ingatan = (m.ingatan || []).filter((e) => e.id_ingatan !== x.id_ingatan);
+    } else if (/^pengingat\./.test(op.type)) {
+      m.pengingat = m.pengingat || [];
+      const J = g.Pengingat && g.Pengingat.Jadwal;
+      let p = m.pengingat.find((e) => e.id_pengingat === x.id_pengingat);
+      if (op.type === 'pengingat.put') {
+        if (p) Object.assign(p, x, { status: x.berikutnya ? 'AKTIF' : 'SELESAI' });
+        else m.pengingat.push(Object.assign({ id_pengguna: S.saya.id, status: x.berikutnya ? 'AKTIF' : 'SELESAI' }, x));
+      } else if (p && op.type === 'pengingat.del') {
+        m.pengingat = m.pengingat.filter((e) => e !== p);
+      } else if (p && op.type === 'pengingat.tunda') {
+        p.berikutnya = x.sampai; p.status = 'AKTIF';
+      } else if (p && op.type === 'pengingat.ack' && (p.berikutnya || 0) <= (x.berikutnya || 0) + 1000 && J) {
+        const nb = J.berikutnya(p, Math.max(x.berikutnya || 0, Date.now()) + 1000);
+        if (nb) p.berikutnya = nb; else p.status = 'SELESAI';
+      }
     } else if (op.type === 'usulan.putuskan') {
       const u = m.usulan.find((e) => e.id_usulan === x.id_usulan);
       if (u) {
@@ -241,6 +272,10 @@
     const key = type === 'kamus.put' || type === 'kamus.del' ? 'kamus:' + (data.id_kamus || data.frasa)
       : type === 'kategori.put' ? 'kategori:' + data.id_kategori
       : type === 'anggaran.put' ? 'anggaran:' + data.id_anggaran
+      : type === 'typo.put' ? 'typo:' + data.salah
+      : /^ingatan\./.test(type) ? 'ingatan:' + data.id_ingatan
+      : type === 'pengingat.put' || type === 'pengingat.del' ? 'pengingat:' + data.id_pengingat
+      : /^pengingat\./.test(type) ? 'pengingat:' + data.id_pengingat + ':' + type + ':' + Date.now()
       : 'usulan:' + data.id_usulan + ':' + type;
     await S.antre(type, data, key);
     S.emit('master');
@@ -248,7 +283,7 @@
   S.gantiMasterDariServer = async function (master, saya) {
     S.master = master;
     // Perubahan master lokal yang belum terkirim diterapkan lagi di atas data server
-    Array.from(S.outbox.values()).filter((o) => /^(kamus|kategori|anggaran|usulan)\./.test(o.type)).forEach((o) => S.terapkanOpMaster(o));
+    Array.from(S.outbox.values()).filter((o) => /^(kamus|kategori|anggaran|usulan|typo|ingatan|pengingat)\./.test(o.type)).forEach((o) => S.terapkanOpMaster(o));
     if (saya) { S.saya = Object.assign({}, S.saya, saya); await S.simpanSesi(); }
     S._peta = null;
     await S.simpanMaster();

@@ -126,6 +126,19 @@ Claude akan memandu tahap ini satu per satu di percakapan.
 | `lupakan kata air` · `kopi itu termasuk apa?` | Menghapus ingatan kata · menanyakan kata itu masuk kategori apa |
 | `bensin 2jt` (biasanya 25rb) | CashKu memastikan dulu: *“Biasanya cuma sekitar Rp25.000 lho, sudah benar?”* |
 | `halo` · `selamat pagi` · `makasih` · `kamu siapa?` · `ok` | Dibalas santai seperti asisten pribadi, dengan bahasa netral (tanpa ungkapan keagamaan) |
+| `bli kopi 25rb` · `byar listrik 350rb` · `bli bnsin 25rb` · `beliii kopi 25k` | Salah ketik dibaca benar otomatis bila CashKu **yakin** (ditandai *✏️ Aku baca: “bli” → “beli”*, tetap ada tombol **Ubah**) |
+| `kpoi 25rb` | Bila **setengah yakin**, CashKu bertanya *“Maksudnya: kopi Rp25.000 (Jajan)?”* → **Ya** disimpan ke sheet **Kamus_Typo** dan dipakai otomatis berikutnya; **Bukan** → kata dipakai apa adanya |
+| `kopi itu termasuk apa` · `kopi masuk kategori apa` | Menjawab **kategori** (tanda tanya tidak wajib) |
+| `harga kopi berapa` · `berapa harga bensin` | Menjawab **harga** dari catatan: terakhir, rata-rata, termurah, termahal |
+| `pengeluran bulan ni brp` · `bayar listrik bulan oktober berapa` | Laporan — **pertanyaan tidak pernah dicatat sebagai transaksi** |
+| `kopi` (satu kata) | CashKu menanyakan maksudnya: catat, tanya kategori, atau tanya harga |
+| `kopi 25` | Nominal tidak ditebak — ditanyakan *Rp25.000?* |
+| `tolong ingat nomor listrik saya 1234567890` · `simpan no rek bca saya 0123 a.n. Dani` · `ingat password wifi: rahasia123` | *“Oke, akan aku ingat 👍”* — data apa pun bisa diingat (sheet **Ingatan**). Tambah `untuk keluarga` agar anggota lain bisa melihat |
+| `no pln saya berapa` · `nomor rekening bca` · `apa saja yang kamu ingat` · `hapus nomor listrik` | Menanyakan, melihat semua, atau menghapus data yang diingat |
+| `ingatkan saya bayar air setiap tanggal 20 jam 9` | Pengingat bulanan + alarm/notifikasi HP |
+| `ingatkan bayar listrik tanggal 27 November` | CashKu bertanya: *diulang setiap tanggal 27* atau *27 November saja*, lalu bertanya jamnya |
+| `ingatkan minum obat tiap hari jam 7 malam` · `ingatkan setiap senin jam 6 buang sampah` · `ingatkan 30 menit lagi angkat jemuran` · `ingatkan bayar kos setiap akhir bulan jam 10` | Pengingat harian, mingguan, sekali, akhir bulan, tahunan |
+| `daftar pengingat` · `hapus pengingat bayar air` · `tes alarm` | Melihat, menghapus, dan menguji alarm |
 | `batal` | Membatalkan pesan transaksi terakhir |
 | `bantuan` | Daftar contoh |
 | **Tekan lama** sebuah pesan → *Hapus pesan* | Pesan dihapus dan transaksinya ikut dibatalkan |
@@ -140,6 +153,17 @@ Claude akan memandu tahap ini satu per satu di percakapan.
 
 ## Memperbarui aplikasi
 
+> **Pembaruan 1.0.12 (paham typo, ingatan data, pengingat & alarm)** — kali ini **server juga berubah**:
+> 1. Buka Apps Script → ganti seluruh isi `Kode.gs` dengan berkas `Kode.gs` yang baru → **Simpan**.
+> 2. Pilih fungsi **`pasangPengingat`** → **Jalankan**. Google akan meminta izin baru (*menghubungkan ke layanan eksternal* untuk mengirim notifikasi HP, dan *menjalankan pemicu*) → **Izinkan**. Di log muncul *✅ Pemicu pengingat terpasang*. Fungsi ini juga otomatis membuat 5 sheet baru: **Kamus_Typo**, **Aturan_Parser**, **Ingatan**, **Pengingat**, **Langganan_Push**.
+> 3. **Deploy → Manage deployments → Edit (ikon pensil) → Version: New version → Deploy** (URL /exec tetap sama).
+> 4. Unggah ulang tampilan ke GitHub (langkah di bawah).
+> 5. Di setiap HP: **Pengaturan → Pengingat & alarm → Aktifkan alarm** (atau ketuk *🔔 Aktifkan alarm HP* di chat), lalu ketik `tes alarm`. Di iPhone, CashKu harus dipasang ke Layar Utama dulu (iOS 16.4+).
+>
+> **Tentang alarm:** notifikasi berbunyi walau CashKu ditutup, **diulang tiap menit (5×) sampai HP dibuka** atau ditekan *Selesai/Tunda*. Saat CashKu sedang terbuka, alarm tampil di layar dengan bunyi berulang dan getar. Karena CashKu adalah aplikasi web, bunyinya memakai suara notifikasi HP (bukan nada alarm jam). Untuk cadangan yang tetap berbunyi walau tanpa internet, ketuk *📅 Simpan ke Kalender* agar pengingat tersimpan juga di aplikasi Kalender HP.
+>
+> **Menyetel kepintaran CashKu tanpa mengubah kode:** sheet **Aturan_Parser** berisi bobot & ambang (misalnya `typo_ambang_yakin` 0.85, `ambang_tanya` 3, `alarm_ulang` 5) beserta penjelasannya. Sheet **Kamus_Typo** berisi daftar salah ketik → kata benar; Anda boleh menambah baris sendiri. Perubahan terbaca HP setelah sinkron berikutnya.
+>
 > **Pembaruan 1.0.11 (CashKu lebih pintar & santai)** hanya mengubah **tampilan** — `Kode.gs` **tidak perlu** ditempel ulang. Unggah ulang tampilan ke GitHub (langkah di bawah). Kata yang dulu sudah diingat (misalnya “air” → Tagihan) tetap dipakai, tetapi sekarang hanya sebagai salah satu petunjuk: `beli air 10rb` otomatis masuk Kebutuhan Bulanan. Saat Anda mengoreksi kategori, CashKu mengingat frasa lengkapnya (misalnya “beli air”), bukan satu kata saja.
 >
 > **Pembaruan 1.0.8 (Tabungan, Hobi, pindah saldo fleksibel, "belanja" umum)** mengubah **server dan tampilan**: tempel ulang `Kode.gs` lalu buat *Versi baru*. Dompet **Tabungan**, kategori **Hobi**, dan perubahan kata "belanja" otomatis ditambahkan ke database lama saat aplikasi sinkron (atau jalankan `migrasiData` sekali). Dompet Tabungan bisa dimatikan di **Pengaturan → Kelola dompet → Tabungan → Aktif**.

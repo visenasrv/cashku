@@ -2,11 +2,11 @@
 /* global importScripts, self, caches, indexedDB, clients */
 importScripts('js/config.js');
 
-const VERSI = 'cashku-1.0.11';
+const VERSI = 'cashku-1.0.12';
 const ASET = [
   './', 'index.html', 'manifest.webmanifest', 'css/style.css',
   'js/config.js', 'js/icons.js', 'js/util.js', 'js/db.js', 'js/api.js', 'js/state.js', 'js/parser.js', 'js/sync.js',
-  'js/ui.js', 'js/charts.js', 'js/chat.js', 'js/pages-utama.js', 'js/laporan.js', 'js/pages-atur.js', 'js/app.js',
+  'js/ui.js', 'js/charts.js', 'js/chat.js', 'js/pengingat.js', 'js/pages-utama.js', 'js/laporan.js', 'js/pages-atur.js', 'js/app.js',
   'js/vendor/jspdf.umd.min.js', 'js/vendor/jspdf.plugin.autotable.min.js',
   'fonts/pjs-400.woff2', 'fonts/pjs-500.woff2', 'fonts/pjs-600.woff2', 'fonts/pjs-700.woff2',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/maskable-512.png', 'icons/apple-touch-icon.png', 'icons/favicon-64.png'
@@ -100,3 +100,54 @@ async function kirimAntrean() {
   }
   await new Promise((res2) => { t.oncomplete = res2; t.onerror = res2; });
 }
+
+// ---------------------------------------------------------------
+// Pengingat & alarm (Web Push): server hanya "mencolek" tanpa isi,
+// lalu service worker mengambil detail pengingat dari server.
+// ---------------------------------------------------------------
+async function sesiSW() {
+  const db = await bukaDB();
+  return req2p(db.transaction('kv').objectStore('kv').get('sesi'));
+}
+async function apiSW(action, data, reqId) {
+  const sesi = await sesiSW();
+  if (!sesi || !sesi.token) return null;
+  const res = await fetch(self.CASHKU_CONFIG.GAS_URL, { method: 'POST', redirect: 'follow', cache: 'no-store', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify({ action, token: sesi.token, reqId: reqId || '', data: data || {} }) });
+  return res.json();
+}
+async function tanganiPush() {
+  let d = { list: [], uji: false };
+  try { const j = await apiSW('pengingatBunyi', {}); if (j && j.success) d = j.data; } catch (e) { /* tetap tampilkan notifikasi umum */ }
+  const wins = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+  const terlihat = wins.some((w) => w.visibilityState === 'visible');
+  if (terlihat && !d.uji && d.list.length) { wins.forEach((w) => w.postMessage({ type: 'alarm' })); return; }   // alarm berbunyi di layar aplikasi
+  const list = d.list.length ? d.list : [{ id: d.uji ? 'uji' : 'umum', judul: d.uji ? 'Tes alarm CashKu berhasil 🎉' : 'Ada pengingat dari CashKu' }];
+  await Promise.all(list.map((p) => self.registration.showNotification('⏰ ' + p.judul, {
+    body: p.id === 'uji' ? 'Alarm & notifikasi sudah aktif di HP ini.' : 'Ketuk untuk membuka CashKu' + (p.jam ? ' · ' + String(p.jam).replace(':', '.') : ''),
+    tag: 'pengingat-' + p.id, renotify: true, requireInteraction: true, silent: false,
+    vibrate: [900, 300, 900, 300, 900, 300, 900, 300, 900, 300, 900],
+    icon: 'icons/icon-192.png', badge: 'icons/favicon-64.png', timestamp: p.berikutnya || Date.now(),
+    data: { id: p.id, berikutnya: p.berikutnya || 0 },
+    actions: p.id === 'uji' || p.id === 'umum' ? [] : [{ action: 'selesai', title: 'Selesai' }, { action: 'tunda', title: 'Tunda 10 menit' }]
+  })));
+}
+self.addEventListener('push', (e) => { e.waitUntil(tanganiPush()); });
+self.addEventListener('notificationclick', (e) => {
+  const n = e.notification, d = n.data || {};
+  n.close();
+  const nyata = d.id && d.id !== 'uji' && d.id !== 'umum';
+  e.waitUntil((async () => {
+    if (nyata && (e.action === 'selesai' || e.action === 'tunda')) {
+      const op = e.action === 'selesai'
+        ? { type: 'pengingat.ack', data: { id_pengingat: d.id, berikutnya: d.berikutnya } }
+        : { type: 'pengingat.tunda', data: { id_pengingat: d.id, sampai: Date.now() + 10 * 60000 } };
+      const id = 'sw-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+      try { await apiSW('sinkronKirim', { ops: [Object.assign({ op_id: id }, op)] }, id); } catch (x) { /* dicoba lagi saat aplikasi dibuka */ }
+      return;
+    }
+    const wins = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    if (wins.length) { const w = wins[0]; try { await w.focus(); } catch (x) {} w.postMessage({ type: 'alarm' }); return; }
+    await self.clients.openWindow('./#/chat' + (nyata ? '?alarm=' + encodeURIComponent(d.id) : ''));
+  })());
+});

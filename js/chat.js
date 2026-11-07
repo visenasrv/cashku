@@ -495,6 +495,60 @@
           : G.kata('btl', ['Oke, transaksinya sudah dibatalkan ↩️', 'Beres, sudah dibatalkan ya ↩️', 'Siap, dibatalkan ↩️']));
       }
       case 'tutup': return tandai(m, i);
+      case 'typoYa': {
+        await tandai(m, i);
+        if (Chat.pending && Chat.pending.type === 'konfirmasi') Chat.pending = null;
+        for (const x of v.ragu) await S.ubahMaster('typo.put', { salah: x.dari, benar: x.ke });
+        await Chat.prosesIntent(P.analisis(v.teks, S.ctxParser()), v.teks);
+        return Chat.sistem(G.kata('typo', ['Sip, lain kali {p} langsung aku baca benar 👍', 'Oke, aku catat: {p} 🧠'], { p: v.ragu.map((x) => '“' + x.dari + '” = “' + x.ke + '”').join(', ') }));
+      }
+      case 'typoBukan':
+        await tandai(m, i);
+        if (Chat.pending && Chat.pending.type === 'konfirmasi') Chat.pending = null;
+        return Chat.prosesIntent(P.analisis(v.teks, S.ctxParser(), { abaikan: v.abaikan, tanpaRagu: true }), v.teks);
+      case 'maksudCatat': {
+        await tandai(m, i);
+        await Chat.tambah({ kind: 'pilihan', data: { teks: 'Berapa harga ' + v.kata + '-nya?', sub: 'Ketik nominalnya aja, contoh: **25rb**' } });
+        Chat.pending = { type: 'harga', jawab: (n) => Chat.proses(v.teks + ' ' + n) };
+        return;
+      }
+      case 'salin':
+        try { await navigator.clipboard.writeText(v.teks); UI.Toast.show('Disalin', 'success'); } catch (e) { UI.Toast.show('Tidak bisa menyalin otomatis', 'warn', 'Tekan lama teksnya untuk menyalin.'); }
+        return;
+      case 'ingatanHapusYa': {
+        await tandai(m, i);
+        for (const id of v.ids) await S.ubahMaster('ingatan.del', { id_ingatan: id });
+        return Chat.sistem(G.kata('ingHps', ['Oke, sudah aku lupakan 🧽', 'Siap, datanya sudah aku hapus 🧽']));
+      }
+      case 'pengingatIsi': {
+        if (!Chat.pending || Chat.pending.type !== 'pengingatIsi') return;
+        await tandai(m, i);
+        const pd = Chat.pending; Chat.pending = null;
+        return pd.isi(v.teks, true);
+      }
+      case 'pengingatUbahJam': {
+        await tandai(m, i);
+        const p = (S.master.pengingat || []).find((x) => x.id_pengingat === v.id);
+        if (!p) return Chat.sistem('Pengingat itu sudah tidak ada.');
+        return Chat.lanjutPengingat({ id: p.id_pengingat, judul: p.judul, j: { pola: p.pola, tanggal: p.tanggal, hari_bulan: p.hari_bulan, hari_minggu: p.hari_minggu, jam: '', perlu: ['jam'] } });
+      }
+      case 'pengingatHapusYa': {
+        await tandai(m, i);
+        const p = (S.master.pengingat || []).find((x) => x.id_pengingat === v.id);
+        await S.ubahMaster('pengingat.del', { id_pengingat: v.id });
+        return Chat.sistem('Oke, pengingat **' + (p ? p.judul : '') + '** sudah aku hapus 🗑️');
+      }
+      case 'notifAktif': {
+        const r = await g.Pengingat.Notif.aktifkan();
+        if (r.ok) await tandai(m, i);
+        return Chat.sistem(r.pesan);
+      }
+      case 'notifUji': { const r = await g.Pengingat.Notif.uji(); return Chat.sistem(r.pesan); }
+      case 'kalender': {
+        const p = (S.master.pengingat || []).find((x) => x.id_pengingat === v.id);
+        if (!p || !g.Pengingat.unduhIcs(p)) return Chat.sistem('Pengingat itu sudah tidak aktif.');
+        return UI.Toast.show('Berkas kalender diunduh', 'success', 'Buka berkasnya lalu pilih aplikasi Kalender untuk menyimpan.');
+      }
       case 'unduhPdf': return g.Laporan.unduh(m.data.cfg, b(m, i));
       case 'ubahFilter': g.Laporan.isiDari(m.data.cfg); return UI.Router.go('laporan');
       case 'pilihTanggal': await tandai(m, i); g.Laporan.isiDari({ mode: 'BEBAS' }); return UI.Router.go('laporan');
@@ -601,6 +655,8 @@
   // =============================================================
   // Kirim & proses
   // =============================================================
+  const RE_YA = /^(ya+|iya+|yes|yap|yup|boleh|ok|oke+|okey|okay|sip+|siap|ingat|inget|y|betul|benar|bener|mau|bener banget|betul sekali)( (ya|dong|deh|ingat|inget|boleh|aja|saja|siap|tolong|ingat ya|itu|benar|betul))*$/;
+  const RE_TIDAK = /^(tidak|nggak|enggak|engga|ngga|no|jangan|skip|nope|gausah|gaush|bukan|salah)( (usah|perlu|deh|ya|dulu|diingat|ingat|itu|maksudnya|maksudku))*$/;
   Chat.kirim = async function (teks) {
     teks = String(teks || '').trim();
     if (!teks) return;
@@ -616,11 +672,21 @@
       const n = P.nominalSaja(teks);
       Chat.pending = null;
       if (n && (p.type === 'harga' || p.type === 'nominal')) return p.jawab(n);
+      if (p.type === 'konfirmasi') {
+        const tt = P.normal(teks).replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+        if (RE_YA.test(tt)) return p.jawab(true);
+        if (RE_TIDAK.test(tt) || /^bukan\b/.test(tt)) return p.jawab(false);
+      }
+      if (p.type === 'ingatanNilai' && teks.trim() && !/^(batal|tidak|nggak|ga jadi|gak jadi)$/i.test(teks.trim())) return p.jawab(teks.trim());
+      if (p.type === 'pengingatIsi') {
+        const hasil = await p.isi(teks);
+        if (hasil !== null && hasil !== undefined) return hasil;
+      }
       if (p.type === 'ingat' || p.type === 'ganda') {
         const tt = P.normal(teks).replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
         if (p.type === 'ingat') {
-          if (/^(ya+|iya+|yes|yap|yup|boleh|ok|oke+|okey|okay|sip+|siap|ingat|inget|y|betul|benar|bener|mau)( (ya|dong|deh|ingat|inget|boleh|aja|saja|siap|tolong|ingat ya))*$/.test(tt)) return p.jawab(true);
-          if (/^(tidak|nggak|enggak|engga|ngga|no|jangan|skip|nope|gausah|gaush)( (usah|perlu|deh|ya|dulu|diingat|ingat))*$/.test(tt)) return p.jawab(false);
+          if (RE_YA.test(tt)) return p.jawab(true);
+          if (RE_TIDAK.test(tt)) return p.jawab(false);
         } else if (tt.split(' ').length <= 4) {
           const i = p.cocok(tt);
           if (i > -1) return p.jawab(i);
@@ -655,7 +721,19 @@
 
   Chat.prosesIntent = async function (it, teks) {
     switch (it.type) {
-      case 'transaksi': return Chat.catatDrafts(it.drafts, teks);
+      case 'transaksi':
+        if (it.perubahan && it.perubahan.length && it.drafts[0]) it.drafts[0].koreksi = it.perubahan;
+        return Chat.catatDrafts(it.drafts, teks);
+      case 'konfirmasiTypo': return Chat.konfirmasiTypo(it, teks);
+      case 'maksud': return Chat.maksud(it);
+      case 'ingatanSimpan': return Chat.ingatanSimpan(it);
+      case 'ingatanTanya': return Chat.ingatanTanya(it);
+      case 'ingatanDaftar': return Chat.ingatanDaftar();
+      case 'ingatanHapus': return Chat.ingatanHapus(it.ids);
+      case 'pengingat': return Chat.lanjutPengingat({ judul: it.judul, j: Object.assign({}, it.jadwal, { perlu: (it.jadwal.perlu || []).slice() }) });
+      case 'pengingatDaftar': return Chat.pengingatDaftar();
+      case 'pengingatHapus': return Chat.pengingatHapus(it.kata);
+      case 'pengingatUji': return Chat.pengingatUji();
       case 'saldo_set': return Chat.setSaldo(it.items, teks);
       case 'tanya': return Chat.jawabTanya(it);
       case 'unduh': return Chat.unduh(it);
@@ -732,7 +810,10 @@
           : '⚠️ ' + l.lengkap + ' ' + Math.round(x.persen) + '% (' + U.rp(x.terpakai) + ' dari ' + U.rp(x.batas) + ')';
         return { level: x.level, teks, persen: x.persen };
       });
-    await Chat.tambah({ kind: 'tx', data: { ids, warn, salam: G.catat(txs, warn) } });
+    let salam = G.catat(txs, warn);
+    const kor = (ds.find((d) => d.koreksi) || {}).koreksi;
+    if (kor && kor.length) salam += '\n✏️ Aku baca: ' + kor.map((x) => '“' + x.dari + '” → “' + x.ke + '”').join(', ');
+    await Chat.tambah({ kind: 'tx', data: { ids, warn, salam } });
     for (const b of ragu) await Chat.tanyaGanda(b.t, b.d);
     for (const b of janggal) await Chat.tanyaJanggal(b.t, b.d);
     for (const b of baru) await Chat.tanyaKategori(b.t, b.d.frasaBelajar || b.t.keterangan.toLowerCase());
@@ -865,6 +946,212 @@
     const e = S.master.kamus.find((x) => x.tipe === 'KATEGORI' && P.normal(x.frasa) === f && ada(x.target));
     if (e) return Chat.sistem('“' + f + '” biasanya aku masukkan ke ' + G.kat(e.target) + ' 👍');
     return Chat.sistem('Aku belum kenal “' + f + '” 🤔 Ajari aku dong, misalnya: **ingat ' + f + ' masuk jajan**.');
+  };
+
+  // ---------- Salah ketik setengah yakin: "Maksudnya: ...?" ----------
+  Chat.ringkasMaksud = function (r, t) {
+    if (r && r.type === 'transaksi') {
+      const kerja = (/^(beli|bayar|isi|jajan|belanja|transfer|kirim|setor|tarik|nabung)\b/.exec(t) || [])[1];
+      return r.drafts.map((d) => (kerja && r.drafts.length === 1 ? kerja + ' ' : '') + String(d.keterangan || '').toLowerCase() + ' ' + U.rp(d.nominal) +
+        (d.jenis !== 'PINDAH' && d.id_kategori ? ' (' + S.kat(d.id_kategori).nama + ')' : '')).join(', ');
+    }
+    return t;
+  };
+  Chat.konfirmasiTypo = async function (it, teksAsli) {
+    const m = await Chat.tambah({ kind: 'pilihan', data: {
+      teks: 'Maksudnya: **' + Chat.ringkasMaksud(it.hasil, it.teks) + '**?',
+      sub: 'Aku kurang yakin dengan ' + it.ragu.map((x) => '“' + x.dari + '” (' + x.ke + '?)').join(', ') + '. Kalau benar, lain kali langsung aku pahami.',
+      chips: [{ label: 'Ya', aksi: 'typoYa', nilai: { teks: it.teks, ragu: it.ragu }, gaya: 'acc' }, { label: 'Bukan', aksi: 'typoBukan', nilai: { teks: teksAsli, abaikan: it.abaikan } }] } });
+    Chat.pending = { type: 'konfirmasi', jawab: (ya) => Chat.aksi(m, m.data.chips[ya ? 0 : 1], ya ? 0 : 1) };
+    return m;
+  };
+
+  // ---------- Satu kata saja ("kopi") → tanyakan maksudnya ----------
+  const reKata = (k) => new RegExp('(^|[^a-z0-9])' + k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '($|[^a-z0-9])');
+  const txDenganKata = (k) => { const re = reKata(P.normal(k)); return S.txTerlihat({}).filter((t) => t.jenis === 'KELUAR' && re.test(P.normal(t.keterangan))); };
+  Chat.maksud = function (it) {
+    const k = it.kata;
+    const chips = [{ label: '📝 Catat ' + k, aksi: 'maksudCatat', nilai: { teks: it.teks, kata: k } }];
+    if (it.dikenal) chips.push({ label: '🏷️ Masuk kategori apa?', aksi: 'kirim', nilai: { teks: k + ' termasuk kategori apa' } });
+    if (txDenganKata(k).length) {
+      chips.push({ label: '💰 Harga ' + k, aksi: 'kirim', nilai: { teks: 'harga ' + k + ' berapa' } });
+      chips.push({ label: '📊 Pengeluaran ' + k + ' bulan ini', aksi: 'kirim', nilai: { teks: 'pengeluaran ' + k + ' bulan ini' } });
+    }
+    return Chat.tambah({ kind: 'pilihan', data: { teks: '**' + U.huruf1(k) + '** — maksudnya gimana nih? 🤔', sub: it.dikenal ? 'Mau dicatat, atau mau tanya sesuatu?' : 'Kalau mau dicatat, sebutkan harganya ya, misalnya **' + k + ' 10rb**.', chips } });
+  };
+
+  // ---------- Harga dari catatan: "harga kopi berapa" ----------
+  Chat.jawabHarga = function (it, kor) {
+    const k = it.kata, list = txDenganKata(k).sort((a, b) => String(b.tanggal_transaksi + b.waktu_catat).localeCompare(String(a.tanggal_transaksi + a.waktu_catat)));
+    if (!list.length) {
+      return Chat.tambah({ kind: 'pilihan', data: { teks: 'Belum ada catatan harga **' + k + '** 🤔', sub: 'Begitu kamu catat (misalnya **' + k + ' 25rb**), aku bisa kasih tahu harga terakhir & rata-ratanya.',
+        chips: [{ label: '📝 Catat ' + k, aksi: 'isi', nilai: { teks: k + ' ' }, tetap: true }] } });
+    }
+    const n = list.map((t) => t.nominal), rata = n.reduce((a, b) => a + b, 0) / n.length;
+    const ter = list[0];
+    return Chat.tambah({ kind: 'ringkasan', data: { judul: '💰 Harga ' + k, total: U.rp(ter.nominal),
+      caption: 'Terakhir · ' + U.tglPanjang(ter.tanggal_transaksi) + (ter.keterangan && P.normal(ter.keterangan) !== P.normal(k) ? ' · ' + ter.keterangan : ''),
+      baris: [{ l: 'Rata-rata', v: U.rp(rata) }, { l: 'Termurah', v: U.rp(Math.min.apply(null, n)) }, { l: 'Termahal', v: U.rp(Math.max.apply(null, n)) }, { l: 'Dicatat', v: n.length + ' kali' }],
+      catatan: kor } });
+  };
+
+  // ---------- Ingatan data: nomor listrik, rekening, dll ----------
+  const SENSITIF = /\b(pin|password|pass|sandi|kata sandi|cvv|otp)\b/;
+  Chat.ingatanSimpan = async function (it) {
+    if (!it.nilai) {
+      const m = await Chat.tambah({ kind: 'pilihan', data: { teks: 'Oke! **' + U.huruf1(it.label) + '**-nya apa?', sub: 'Ketik saja isinya, nanti aku ingat 🧠' } });
+      Chat.pending = { type: 'ingatanNilai', jawab: (v) => Chat.ingatanSimpan(Object.assign({}, it, { nilai: v })) };
+      return m;
+    }
+    const lama = S.ingatanSaya().find((x) => P.normal(x.label) === P.normal(it.label) && x.id_pengguna === S.saya.id);
+    const id = lama ? lama.id_ingatan : 'ING-' + Date.now().toString(36) + U.rand(4);
+    await S.ubahMaster('ingatan.put', { id_ingatan: id, label: it.label, nilai: it.nilai, lingkup: it.lingkup || 'PRIBADI', id_pengguna: S.saya.id });
+    let teks = (lama ? G.kata('ingUbah', ['Oke, aku perbarui ya 👍', 'Siap, sudah kuganti 👌']) : G.kata('ingBaru', ['Oke, akan aku ingat 👍', 'Siap, sudah kusimpan 🧠', 'Beres, aku ingat ya ✍️'])) +
+      '\n**' + U.huruf1(it.label) + '**: ' + it.nilai;
+    if (lama && lama.nilai !== it.nilai) teks += '\n(sebelumnya: ' + lama.nilai + ')';
+    const sub = (it.lingkup === 'KELUARGA' ? 'Bisa dilihat semua anggota keluarga. ' : 'Hanya untuk kamu. ') + 'Tanya kapan saja, misalnya: **' + it.label + ' saya berapa?**' +
+      (SENSITIF.test(P.normal(it.label)) ? ' ⚠️ Data ini tersimpan di Google Sheet keluarga — jangan simpan PIN ATM/m-banking atau kode OTP ya.' : '');
+    return Chat.tambah({ kind: 'pilihan', data: { teks, sub, chips: [{ label: 'Salin', aksi: 'salin', nilai: { teks: it.nilai }, tetap: true }, { label: 'Hapus', aksi: 'ingatanHapusYa', nilai: { ids: [id] }, gaya: 'ghost' }] } });
+  };
+  Chat.ingatanTanya = function (it) {
+    const xs = S.ingatanSaya().filter((x) => it.ids.indexOf(x.id_ingatan) > -1);
+    if (!xs.length) return Chat.sistem('Hmm, aku belum punya data itu 🤔 Ajari aku, misalnya: **ingat nomor listrik saya 1234567890**.');
+    const pemilik = (x) => (x.id_pengguna !== S.saya.id ? ' (dari ' + S.orang(x.id_pengguna).nama + ')' : '');
+    const teks = xs.length === 1 ? '**' + U.huruf1(xs[0].label) + '**' + pemilik(xs[0]) + ': ' + xs[0].nilai
+      : 'Ini yang aku ingat:\n' + xs.map((x) => '• **' + U.huruf1(x.label) + '**' + pemilik(x) + ': ' + x.nilai).join('\n');
+    return Chat.tambah({ kind: 'pilihan', data: { teks, chips: xs.slice(0, 3).map((x) => ({ label: 'Salin' + (xs.length > 1 ? ' ' + x.label : ''), aksi: 'salin', nilai: { teks: x.nilai }, tetap: true })) } });
+  };
+  Chat.ingatanDaftar = function () {
+    const xs = S.ingatanSaya();
+    if (!xs.length) return Chat.tambah({ kind: 'pilihan', data: { teks: 'Aku belum menyimpan data apa pun 🙂', sub: 'Contoh: **ingat nomor listrik saya 1234567890**, **simpan no rek bca saya 0123456789**, **ingat password wifi: rahasia123**.' } });
+    return Chat.sistem('Ini yang aku ingat 🧠\n' + xs.map((x) => '• **' + U.huruf1(x.label) + '**: ' + x.nilai + (x.lingkup === 'KELUARGA' ? ' 👨‍👩‍👧' : '')).join('\n') + '\n\nUntuk menghapus: **hapus ' + xs[0].label + '**');
+  };
+  Chat.ingatanHapus = function (ids) {
+    const xs = S.ingatanSaya().filter((x) => ids.indexOf(x.id_ingatan) > -1 && (x.id_pengguna === S.saya.id || S.saya.peran === 'ADMIN'));
+    if (!xs.length) return Chat.sistem('Data itu bukan milikmu, jadi tidak bisa kuhapus 🙏');
+    return Chat.tambah({ kind: 'pilihan', data: { teks: 'Hapus ' + xs.map((x) => '**' + U.huruf1(x.label) + '** (' + x.nilai + ')').join(', ') + ' dari ingatan?',
+      chips: [{ label: 'Hapus', aksi: 'ingatanHapusYa', nilai: { ids: xs.map((x) => x.id_ingatan) }, gaya: 'acc' }, { label: 'Batal', aksi: 'tutup' }] } });
+  };
+
+  // ---------- Pengingat & alarm ----------
+  const PJ = () => g.Pengingat.Jadwal;
+  const JAM_SARAN = { pagi: ['05:00', '06:00', '07:00', '08:00'], siang: ['11:00', '12:00', '13:00'], sore: ['15:00', '16:00', '17:00'], malam: ['19:00', '20:00', '21:00'] };
+  Chat.tanyaPengingat = async function (d, teks, chips, isi, sub) {
+    const m = await Chat.tambah({ kind: 'pilihan', data: { teks, sub, chips: (chips || []).map((c) => Object.assign({ aksi: 'pengingatIsi' }, c)) } });
+    Chat.pending = { type: 'pengingatIsi', isi };
+    return m;
+  };
+  Chat.lanjutPengingat = async function (d) {
+    const j = d.j, perlu = j.perlu || (j.perlu = []);
+    const selesai = (x) => { j.perlu = perlu.filter((y) => y !== x); return Chat.lanjutPengingat(d); };
+    if (perlu.indexOf('judul') > -1) {
+      return Chat.tanyaPengingat(d, 'Siap! Mau diingatkan soal apa? 📝', [], (tk) => { d.judul = U.huruf1(String(tk).trim().replace(/^(untuk|buat|soal)\s+/i, '')); return selesai('judul'); },
+        'Contoh: **bayar air**, **minum obat**, **jemput anak**');
+    }
+    if (perlu.indexOf('kapan') > -1) {
+      return Chat.tanyaPengingat(d, 'Kapan mau diingatkan soal **' + d.judul + '**? ⏰', [{ label: 'Besok', nilai: { teks: 'besok' } }, { label: 'Setiap hari', nilai: { teks: 'setiap hari' } },
+        { label: 'Setiap minggu', nilai: { teks: 'setiap minggu' } }, { label: 'Setiap bulan', nilai: { teks: 'setiap bulan' } }], (tk) => {
+        const j2 = P.jadwalDari(P.normal(tk), PJ().hariIniLokal());
+        if (!j2.pola) return null;
+        d.j = Object.assign(j2, { jam: j2.jam || j.jam, perlu: j2.perlu.filter((x) => x !== 'kapan' && !(x === 'jam' && j.jam)) });
+        return Chat.lanjutPengingat(d);
+      }, 'Contoh: **besok**, **setiap tanggal 20**, **tiap Senin**, **27 November**');
+    }
+    if (perlu.indexOf('hari') > -1) {
+      const HR = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
+      return Chat.tanyaPengingat(d, 'Setiap hari apa? 📅', HR.map((h) => ({ label: h, nilai: { teks: h.toLowerCase() } })), (tk) => {
+        const ada = HR.map((h, i) => (new RegExp('\\b' + h.toLowerCase().slice(0, 3)).test(P.normal(tk)) ? i + 1 : 0)).filter(Boolean);
+        if (!ada.length) return null;
+        j.hari_minggu = ada.join(','); return selesai('hari');
+      });
+    }
+    if (perlu.indexOf('tanggal') > -1) {
+      return Chat.tanyaPengingat(d, 'Tanggal berapa setiap bulannya? 📅', ['1', '5', '10', '20', '25'].map((x) => ({ label: 'Tgl ' + x, nilai: { teks: x } })).concat([{ label: 'Akhir bulan', nilai: { teks: 'akhir' } }]), (tk) => {
+        const t = P.normal(tk);
+        if (/akhir/.test(t)) j.hari_bulan = 'AKHIR';
+        else { const n = Number((/\d{1,2}/.exec(t) || [])[0]); if (!(n >= 1 && n <= 31)) return null; j.hari_bulan = String(n); }
+        j.pola = 'BULANAN'; return selesai('tanggal');
+      });
+    }
+    if (perlu.indexOf('ulang') > -1) {
+      const hb = Number(String(j.tanggal).slice(8, 10));
+      const tglTeks = U.tglPanjang(j.tanggal);
+      const denganBulan = !j.hari_bulan;     // tanggal + nama bulan disebut ("27 November")
+      const opsi = [{ label: '🔁 Setiap tanggal ' + hb, nilai: { teks: 'setiap bulan' } }, { label: 'Hanya ' + tglTeks, nilai: { teks: 'sekali' } }];
+      if (denganBulan) opsi.push({ label: '🎂 Setiap tahun', nilai: { teks: 'setiap tahun' } });
+      return Chat.tanyaPengingat(d, 'Mau diulang **setiap tanggal ' + hb + '**, atau **' + tglTeks + '** saja?', opsi, (tk) => {
+        const t = P.normal(tk);
+        if (/tahun/.test(t)) { j.pola = 'TAHUNAN'; j.tanggal = j.tanggal.slice(5); }
+        else if (/\b(setiap|tiap|ulang|diulang|rutin|bulan)\b/.test(t) && !/\b(itu saja|itu aja|sekali)\b/.test(t)) { j.pola = 'BULANAN'; j.hari_bulan = String(hb); }
+        else if (/\b(sekali|hanya|cuma|saja|aja|itu|tidak|nggak|jangan)\b/.test(t)) { j.pola = 'SEKALI'; j.hari_bulan = ''; }
+        else return null;
+        return selesai('ulang');
+      });
+    }
+    if (perlu.indexOf('jam') > -1) {
+      const saran = JAM_SARAN[j.saranJam] || ['07:00', '09:00', '12:00', '19:00'];
+      return Chat.tanyaPengingat(d, 'Jam berapa mau diingatkan? 🕘', saran.map((x) => ({ label: x.replace(':', '.'), nilai: { teks: 'jam ' + x } })), (tk) => {
+        let t = P.normal(tk).trim();
+        if (/^\d{1,2}$/.test(t)) t = 'jam ' + t;
+        if (/^\d{1,2}\s+(pagi|siang|sore|malam|subuh)$/.test(t)) t = 'jam ' + t;
+        const jm = P.jamDari(t) || P.jamDari('jam ' + t);
+        if (!jm) return null;
+        j.jam = jm.jam; return selesai('jam');
+      }, 'Ketik saja, misalnya **9**, **19.30**, atau **jam 7 malam**');
+    }
+    return Chat.simpanPengingat(d);
+  };
+  Chat.simpanPengingat = async function (d) {
+    const J = PJ(), j = d.j, now = Date.now();
+    const p = { id_pengingat: d.id || 'PGN-' + Date.now().toString(36) + U.rand(4), id_pengguna: S.saya.id, judul: d.judul || 'Pengingat', pola: j.pola || 'SEKALI',
+      tanggal: j.tanggal || '', hari_bulan: j.hari_bulan || '', hari_minggu: j.hari_minggu || '', jam: j.jam || '07:00' };
+    if (j.relatifMenit) { const w = J.dariMs(now + j.relatifMenit * 60000); p.pola = 'SEKALI'; p.tanggal = w.tanggal; p.jam = w.jam; }
+    if (p.pola === 'SEKALI' && !p.tanggal) { p.tanggal = J.hariIniLokal(); if (!J.berikutnya(p, now)) p.tanggal = J.dariMs(now + 864e5).tanggal; }
+    if (p.pola !== 'SEKALI') p.tanggal = p.pola === 'TAHUNAN' ? p.tanggal : '';
+    p.berikutnya = J.berikutnya(p, now - 1000);
+    if (!p.berikutnya) {
+      d.j.perlu = ['jam'];
+      await Chat.sistem('Waduh, waktu itu sudah lewat 😅 Pilih jam lain ya.');
+      return Chat.lanjutPengingat(d);
+    }
+    await S.ubahMaster('pengingat.put', p);
+    const st = g.Pengingat.Notif.status();
+    const chips = [];
+    if (st !== 'aktif') chips.push({ label: '🔔 Aktifkan alarm HP', aksi: 'notifAktif', tetap: true });
+    chips.push({ label: '📅 Simpan ke Kalender', aksi: 'kalender', nilai: { id: p.id_pengingat }, tetap: true });
+    chips.push({ label: 'Ubah jam', aksi: 'pengingatUbahJam', nilai: { id: p.id_pengingat } });
+    chips.push({ label: 'Hapus', aksi: 'pengingatHapusYa', nilai: { id: p.id_pengingat }, gaya: 'ghost' });
+    return Chat.tambah({ kind: 'pilihan', data: {
+      teks: (d.id ? 'Oke, jamnya sudah aku ubah ⏰' : G.kata('pgn', ['Siap, nanti aku ingatkan ⏰', 'Oke, pengingatnya sudah aku pasang ⏰', 'Beres! Nanti aku bunyikan ⏰'])) +
+        '\n**' + p.judul + '**\n' + J.label(p) + '\nBerikutnya: ' + J.waktuLabel(p.berikutnya),
+      sub: st === 'aktif' ? 'HP ini akan berbunyi saat waktunya tiba, walau CashKu ditutup 🔔' : 'Supaya HP berbunyi walau CashKu ditutup, ketuk **Aktifkan alarm HP**. ' + (st === 'belum' ? '' : g.Pengingat.Notif.pesanStatus()),
+      chips } });
+  };
+  Chat.pengingatDaftar = function () {
+    const J = PJ();
+    const xs = (S.master.pengingat || []).filter((p) => p.id_pengguna === S.saya.id && p.status === 'AKTIF').sort((a, b) => (a.berikutnya || 0) - (b.berikutnya || 0));
+    const st = g.Pengingat.Notif.status();
+    const chipNotif = st === 'aktif' ? [{ label: '🔔 Tes alarm', aksi: 'notifUji', tetap: true }] : [{ label: '🔔 Aktifkan alarm HP', aksi: 'notifAktif', tetap: true }];
+    if (!xs.length) return Chat.tambah({ kind: 'pilihan', data: { teks: 'Belum ada pengingat aktif ⏰', sub: 'Contoh: **ingatkan saya bayar air setiap tanggal 20 jam 9**', chips: chipNotif } });
+    return Chat.tambah({ kind: 'pilihan', data: {
+      teks: 'Pengingat kamu ⏰\n' + xs.map((p) => '• **' + p.judul + '** — ' + J.label(p) + (p.berikutnya ? ' (berikutnya ' + J.waktuLabel(p.berikutnya).replace(/^\w+, /, '') + ')' : '')).join('\n'),
+      sub: g.Pengingat.Notif.pesanStatus(),
+      chips: chipNotif.concat(xs.slice(0, 4).map((p) => ({ label: '🗑️ ' + p.judul, aksi: 'pengingatHapusYa', nilai: { id: p.id_pengingat }, gaya: 'ghost' }))) } });
+  };
+  Chat.pengingatHapus = function (kata) {
+    const xs = (S.master.pengingat || []).filter((p) => p.id_pengguna === S.saya.id && p.status === 'AKTIF');
+    const k = P.normal(kata || '').split(' ').filter((w) => w.length >= 3);
+    const cocok = k.length ? xs.filter((p) => k.every((w) => P.normal(p.judul).indexOf(w) > -1)) : xs;
+    if (!cocok.length) return Chat.sistem(xs.length ? 'Hmm, nggak ada pengingat “' + kata + '” 🤔 Ketik **daftar pengingat** untuk melihat semuanya.' : 'Belum ada pengingat aktif 🙂');
+    return Chat.tambah({ kind: 'pilihan', data: { teks: cocok.length === 1 ? 'Hapus pengingat **' + cocok[0].judul + '** (' + PJ().label(cocok[0]) + ')?' : 'Pengingat mana yang mau dihapus?',
+      chips: cocok.slice(0, 5).map((p) => ({ label: cocok.length === 1 ? 'Hapus' : '🗑️ ' + p.judul, aksi: 'pengingatHapusYa', nilai: { id: p.id_pengingat }, gaya: cocok.length === 1 ? 'acc' : undefined }))
+        .concat([{ label: 'Batal', aksi: 'tutup' }]) } });
+  };
+  Chat.pengingatUji = async function () {
+    const st = g.Pengingat.Notif.status();
+    if (st !== 'aktif') return Chat.tambah({ kind: 'pilihan', data: { teks: g.Pengingat.Notif.pesanStatus(), chips: st === 'belum' ? [{ label: '🔔 Aktifkan alarm HP', aksi: 'notifAktif', tetap: true }] : [] } });
+    const r = await g.Pengingat.Notif.uji();
+    return Chat.sistem(r.pesan);
   };
 
   // ---------- Obrolan ringan ----------
@@ -1054,7 +1341,7 @@
   };
 
   // ---------- Pertanyaan ----------
-  function catatanKoreksi(it) { return it.perubahan && it.perubahan.length ? 'Saya baca: “' + it.teksKoreksi + '”' : ''; }
+  function catatanKoreksi(it) { return it.perubahan && it.perubahan.length ? 'Aku baca: “' + it.teksKoreksi + '”' : ''; }
   // ---------- Terbesar / terkecil ----------
   const selisihHari = (a, b) => Math.round((U.parseTgl(b) - U.parseTgl(a)) / 86400000);
   const tglSingkat = (a, b) => (a === b ? U.tglPendek(a) : U.tglPendek(a) + '–' + U.tglPendek(b)) + ' ' + b.slice(0, 4);
@@ -1233,6 +1520,7 @@
         baris: it.dompet ? Chat.gerakDompet(it.dompet, 3) : s.map((x) => ({ l: (x.dompet.ikon || '') + ' ' + x.dompet.nama, v: (x.saldo < 0 ? '−' : '') + U.rp(x.saldo), kelas: x.saldo < 0 ? 't-out' : '' })),
         catatan: (g.Sync.status !== 'ok' ? 'Data per ' + U.relatif(S.meta.lastSync) + '. ' : '') + kor } });
     }
+    if (it.metric === 'harga') return Chat.jawabHarga(it, kor);
     if (it.metric === 'pindah') return Chat.jawabPindah(it, per, orang, namaOrang, kor);
     if (it.metric === 'terakhir') return Chat.jawabTerakhir(it, orang, namaOrang, kor);
     if (it.metric === 'anggaran') {
