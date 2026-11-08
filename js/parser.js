@@ -247,16 +247,47 @@
     else v = parseFloat(num.replace(/[.,]/g, ''));
     return { v: Math.round(v), mult };
   }
+  // 1.0.19: nominal majemuk berspasi — "1 juta 550" (= 1.550.000), "2 juta 750 ribu", "1 juta 2 ratus", "15 ribu 500".
+  // Angka 1–2 digit sesudah satuan ("2 juta 50") bisa berarti 2.500.000 atau 2.050.000 → ditanyakan, tidak ditebak.
+  const RE_SATUAN_QTY = /^\s*(?:kali|x|gelas|cup|pcs|buah|bh|biji|bungkus|bks|porsi|orang|org|liter|ltr|kg|gram|gr|ons|lembar|lbr|botol|btl|kotak|dus|pak|pack|unit|ekor|butir|sachet|saset|renteng|meter|lusin|kodi|batang|bulan(?!\s+(?:ini|lalu|kemarin|depan))|hari(?!\s+(?:ini|lalu|kemarin))|minggu(?!\s+(?:ini|lalu|kemarin|depan))|tahun(?!\s+(?:ini|lalu|kemarin|depan))|%|persen)\b/;
+  const RE_SESUDAH_BEBAS = /^\s*(?:$|[,;.!?)]|(?:dan|dari|ke|di|untuk|utk|buat|bwt|pakai|pake|via|lewat|masuk|keluar|tunai|cash|transfer|tf|ya|yah|aja|saja|dong|deh|tadi|kemarin|barusan|hari ini|rupiah|rp)\b)/;
+  function sambungNominal(s, akhir, r) {
+    if (r.mult !== 1e6 && r.mult !== 1e3) return null;
+    const sisa = s.slice(akhir);
+    let x;
+    if (r.mult === 1e6 && (x = /^\s+(\d{1,3})\s*(?:ribu|rb|rbu|k)(?=$|[^a-z0-9])/.exec(sisa))) return { tambah: Number(x[1]) * 1e3, len: x[0].length };
+    if (r.mult === 1e6 && (x = /^\s+([1-9])\s*ratus(?:\s*(?:ribu|rb|rbu))?(?=$|[^a-z0-9])/.exec(sisa))) return { tambah: Number(x[1]) * 1e5, len: x[0].length };
+    if (r.mult === 1e3 && (x = /^\s+([1-9])\s*ratus(?=$|[^a-z0-9])/.exec(sisa))) return { tambah: Number(x[1]) * 100, len: x[0].length };
+    if (!(x = /^\s+(\d{1,3})(?=$|[^a-z0-9.,]|[.,](?!\d))/.exec(sisa))) return null;
+    const lanjut = sisa.slice(x[0].length);
+    if (RE_SATUAN_QTY.test(lanjut)) return null;
+    const y = x[1];
+    if (y.length === 3) return { tambah: Number(y) * (r.mult / 1e3), len: x[0].length };
+    if (!RE_SESUDAH_BEBAS.test(lanjut)) return null;        // "25 ribu 3 roti" → 3 = jumlah barang berikutnya
+    // Ragu: "2 juta 50" = 2.500.000 (seperti 2jt50) atau 2.050.000?
+    const pecahan = Math.round(parseFloat('0.' + y) * r.mult);       // "1 juta 5" = 1.500.000 (seperti 1jt5)
+    if (y.length === 1) return { tambah: pecahan, len: x[0].length };
+    return { tambah: pecahan, len: x[0].length, opsi: [r.v + pecahan, r.v + Number(y) * (r.mult / 1e3)] };
+  }
   function cariNominal(s) {
     const out = [];
     RE_AMT.lastIndex = 0;
     let m;
     while ((m = RE_AMT.exec(s))) {
-      const start = m.index + m[1].length, teks = m[0].slice(m[1].length);
+      const start = m.index + m[1].length;
+      let teks = m[0].slice(m[1].length);
       const r = nilaiNominal(m[3], m[4], m[4] ? m[5] : '');
       if (!(r.v > 0)) continue;
       const kuat = r.mult > 1 || !!m[2] || /[.,]\d{3}(?!\d)/.test(m[3]) || r.v >= 1000;
-      out.push({ nilai: r.v, kuat, index: start, len: teks.length, teks });
+      const o = { nilai: r.v, kuat, index: start, len: teks.length, teks };
+      const sb = !m[5] ? sambungNominal(s, m.index + m[0].length, r) : null;
+      if (sb) {
+        o.nilai = r.v + sb.tambah;
+        o.teks = s.slice(start, m.index + m[0].length + sb.len); o.len = o.teks.length;
+        if (sb.opsi && sb.opsi[0] !== sb.opsi[1]) o.opsi = sb.opsi;
+        RE_AMT.lastIndex = m.index + m[0].length + sb.len;
+      }
+      out.push(o);
     }
     return out;
   }
@@ -487,7 +518,7 @@
       const k = w[i];
       const mulai = SATUAN_KATA[k] !== undefined || SE_KATA[k] || k === 'setengah';
       if (!mulai) { out.push(k); i++; continue; }
-      let total = 0, h = 0, u = null, frac = 0, setengah = 0, j = i, kuat = false, koma = false;
+      let total = 0, h = 0, u = null, frac = 0, setengah = 0, j = i, kuat = false, koma = false, skalaAkhir = 0, hanyaSatuan = true;
       for (; j < w.length; j++) {
         const x = w[j];
         if (SATUAN_KATA[x] !== undefined) {
@@ -502,18 +533,20 @@
           if (s[1]) { total += (h || 1) * s[1]; h = 0; } else h += s[0];
           continue;
         }
-        if (x === 'belas' && u !== null) { h += 10 + u; u = null; kuat = true; continue; }
-        if (x === 'puluh' && u !== null) { h += u * 10; u = null; kuat = true; continue; }
-        if (x === 'ratus' && u !== null) { h += u * 100; u = null; kuat = true; continue; }
+        if (x === 'belas' && u !== null) { h += 10 + u; u = null; kuat = true; hanyaSatuan = false; continue; }
+        if (x === 'puluh' && u !== null) { h += u * 10; u = null; kuat = true; hanyaSatuan = false; continue; }
+        if (x === 'ratus' && u !== null) { h += u * 100; u = null; kuat = true; hanyaSatuan = false; continue; }
         if (x === 'setengah') { setengah = 0.5; continue; }
         if (SKALA_KATA[x] && (u !== null || h || setengah || frac)) {
           const g = h + (u || 0) + frac + setengah;
           total += (g || 0.5) * SKALA_KATA[x];
-          h = 0; u = null; frac = 0; setengah = 0; kuat = true; continue;
+          h = 0; u = null; frac = 0; setengah = 0; kuat = true; skalaAkhir = SKALA_KATA[x]; hanyaSatuan = true; continue;
         }
         break;
       }
-      const sisa = h + (u || 0);
+      let sisa = h + (u || 0);
+      // "satu juta lima ratus lima puluh" = 1.550.000 (kata "ribu" sering tidak diucapkan); "satu juta lima" = 1.500.000
+      if (sisa > 0 && sisa < 1000 && skalaAkhir >= 1e6) sisa = hanyaSatuan && sisa < 10 ? sisa * (skalaAkhir / 10) : sisa * (skalaAkhir / 1e3);
       // "jam tujuh", "tanggal lima" → angka
       if (!kuat && u !== null && j === i + 1 && /^(jam|pukul|tanggal|tgl)$/.test(out[out.length - 1] || '')) { out.push(String(u)); i = j; continue; }
       if (!kuat || (setengah && !total && !sisa)) { out.push(k); i++; continue; }
@@ -597,7 +630,10 @@
     const tanpaNominal = hapusRentang(s, buang);
 
     // Jenis
-    const katSemua = cariSemua(tanpaNominal, idx.kat).filter((k) => !kataUmum(k.frasa));
+    // 1.0.19: kata satuan sesudah angka ("kopi 2 gelas", "teh 3 botol") bukan petunjuk kategori, kecuali hanya itu yang ada
+    const katMentah = cariSemua(tanpaNominal, idx.kat).filter((k) => !kataUmum(k.frasa));
+    const satuanQty = (k) => /\d\s*$/.test(tanpaNominal.slice(0, k.index)) && RE_SATUAN_QTY.test(k.frasa);
+    const katSemua = katMentah.some((k) => !satuanQty(k)) ? katMentah.filter((k) => !satuanQty(k)) : katMentah;
     const katTerpanjang = katSemua.slice().sort((a, b) => b.len - a.len)[0];
     let dompetHits = ctx.fiturDompet ? cariSemua(tanpaNominal, idx.dompet) : [];
     // "pindah dana", "transfer dana", "dana masuk": di sini "dana" = uang, bukan e-wallet DANA
@@ -627,6 +663,7 @@
     else if (katTerpanjang && katTerpanjang.jenis === 'MASUK' && !awalKeluar) jenis = 'MASUK';
 
     const d = { teks: seg, jenis, nominal: pilih ? pilih.nilai : 0, nominalRagu: !!(pilih && !pilih.kuat), tanpaNominal: !pilih, tanggal: (tg && tg.tanggal) || ctx.hariIni };
+    if (pilih && pilih.opsi) d.nominalOpsi = pilih.opsi;
 
     if (jenis === 'PINDAH') {
       if (!ctx.fiturDompet) { d.pindahNonaktif = true; return d; }
@@ -1686,6 +1723,8 @@
     if (pg) return pg;
     const sp = sapaanDari(t0, raw, ctx, idx);
     if (sp) return sp;
+    const klo = kelolaDari(t0, ctx, idx);
+    if (klo) return klo;
     const atr = aturDari(t0, raw, ctx, idx);
     if (atr) return atr;
     const pn = penasihatDari(t0, raw, ctx);
@@ -1772,6 +1811,53 @@
       q.kata = kata;                                   // dicari di keterangan transaksi ("rincian kopi susu")
     }
     return q;
+  }
+
+  // =============================================================
+  // 1.0.19 — Atur ulang saldo (Admin) & nonaktif/aktifkan anggaran lewat chat
+  // =============================================================
+  const RE_RESET_KATA = '(?:reset|riset|atur\\s*ulang|setel\\s*ulang|set\\s*ulang|nol\\s*kan|nolin|nolkan|di\\s*nol\\s*kan|dinolkan|kosongkan|kosongin|dikosongkan|bersihkan|hapus|hilangkan|mulai\\s+(?:dari\\s+)?(?:0|nol))';
+  const RE_SALDO_ULANG_1 = new RegExp('^(?:tolong\\s+|mau\\s+|saya\\s+mau\\s+|coba\\s+)?' + RE_RESET_KATA + '\\s+(?:semua\\s+)?saldo(?:nya)?\\b(.*)$');
+  const RE_SALDO_ULANG_2 = new RegExp('^(?:tolong\\s+)?(?:semua\\s+)?saldo(?:nya)?\\b(.*?)\\b(?:di\\s*)?' + RE_RESET_KATA + '\\b(.*)$');
+  const RE_SALDO_NOL = /^(?:tolong\s+)?(?:semua\s+)?saldo(?:nya)?\b(.*?)\b(?:jadi|jadikan|dijadikan|menjadi|diubah jadi|ubah jadi|sekarang|skrg)\s+(?:0|nol|kosong|rp\s?0)\b(.*)$/;
+  const RE_ANGGARAN_MATI = /^(?:tolong\s+|mau\s+|saya\s+mau\s+|coba\s+)?(?:hapus|apus|hapuskan|nonaktifkan|nonaktifin|nonaktif|non aktifkan|matikan|matiin|hentikan|stop|stopkan|batalkan|buang|hilangkan|tiadakan)\s+(?:semua\s+|seluruh\s+)?(?:anggaran|budget|batas belanja)(?:nya)?\b(.*)$/;
+  const RE_ANGGARAN_MATI_2 = /^(?:semua\s+|seluruh\s+)?(?:anggaran|budget|batas belanja)(?:nya)?\b(.*?)\b(?:di\s*hapus|dihapus|di\s*nonaktifkan|dinonaktifkan|nonaktifkan|nonaktif|non aktif|dimatikan|matikan|di\s*stop|distop|stop|dibatalkan|batalkan|hapus|ga usah|gak usah|nggak usah|tidak usah|tidak perlu|ga perlu|gak perlu)\b(.*)$/;
+  const RE_ANGGARAN_HIDUP = /^(?:tolong\s+)?(?:aktifkan|aktifin|hidupkan|nyalakan|pakai|pake)\s+(?:lagi\s+|kembali\s+)?(?:semua\s+|seluruh\s+)?(?:anggaran|budget|batas belanja)(?:nya)?\b(.*)$/;
+  function kelolaDari(t0, ctx, idx) {
+    let m;
+    const t = t0.replace(/[?!.]+$/, '').trim();
+    // ---- Atur ulang saldo ----
+    if (!/\b(berapa|brp|cek|lihat)\b/.test(t) && ((m = RE_SALDO_ULANG_1.exec(t)) || (m = RE_SALDO_ULANG_2.exec(t)) || (m = RE_SALDO_NOL.exec(t)))) {
+      const sisa = (m[1] || '') + ' ' + (m[2] || '');
+      const r = { type: 'saldoUlang', target: 0, dompet: [], semua: /\b(semua|seluruh|semuanya|all)\b/.test(t) };
+      const nom = cariNominal(tutupBukanNominal(sisa)).filter((a) => a.kuat);
+      if (nom.length && !RE_SALDO_NOL.test(t)) r.target = nom[0].nilai;
+      const hits = cariSemua(sisa, idx.dompet);
+      hits.forEach((h) => idsFrasa(idx, h.frasa).forEach((id) => { if (r.dompet.indexOf(id) < 0) r.dompet.push(id); }));
+      if (!r.dompet.length) r.semua = true;
+      return r;
+    }
+    // ---- Anggaran: nonaktifkan / aktifkan lagi ----
+    let mode = '';
+    if ((m = RE_ANGGARAN_HIDUP.exec(t))) mode = 'aktif';
+    else if ((m = RE_ANGGARAN_MATI.exec(t)) || (m = RE_ANGGARAN_MATI_2.exec(t))) mode = 'nonaktif';
+    if (!mode) return null;
+    const sisa = ((m[1] || '') + ' ' + (m[2] || '')).replace(/\b(saja|aja|ya|dong|deh|lagi|kembali|yang|untuk|buat|kategori|anggaran|budget|nya)\b/g, ' ');
+    const r = { type: 'anggaranStatus', mode, semua: /\b(semua|seluruh|semuanya|all)\b/.test(t), kategori: [], kata: [] };
+    if (/\b(total|semua pengeluaran|keseluruhan)\b/.test(sisa) && !r.semua) r.kategori.push('SEMUA');
+    const ang = cariAnggota(sisa, idx, ctx);
+    if (ang && !ang.sendiri) r.orang = ang.id;
+    let rest = sisa;
+    idx.anggota.forEach((e) => { if (e.frasa && new RegExp('\\b' + e.frasa.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b').test(rest)) rest = rest.replace(e.frasa, ' '); });
+    rest.split(/\s*(?:,|&|\bdan\b|\bserta\b|\bsama\b|\+)\s*/).map((x) => x.replace(/\b(semua|seluruh|semuanya|total|saya|aku|keluarga|per orang|bulanan|mingguan)\b/g, ' ').trim()).filter(Boolean).forEach((bag) => {
+      const hit = cariSemua(bag, idx.kat).filter((k) => !kataUmum(k.frasa)).sort((a, b) => b.len - a.len)[0];
+      let ids = hit ? [hit.target] : cariKategoriNama(bag, ctx);
+      ids = ids.filter((id) => idx.katAktif[id] && idx.katAktif[id].jenis === 'KELUAR');
+      if (ids.length) ids.forEach((id) => { if (r.kategori.indexOf(id) < 0) r.kategori.push(id); });
+      else if (/^[a-z][a-z ]{1,30}$/.test(bag)) r.kata.push(bag);
+    });
+    if (/\bmingguan\b/.test(sisa)) r.periode = 'MINGGUAN'; else if (/\bbulanan\b/.test(sisa) && !r.kategori.includes('KAT-BULANAN')) r.periode = 'BULANAN';
+    return r;
   }
 
   function inti(t0, ctx, idx, at) {

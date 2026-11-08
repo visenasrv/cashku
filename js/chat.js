@@ -359,7 +359,7 @@
     },
     bantuan(m) {
       const contoh = [['Catat pengeluaran', 'beli kopi 25rb'], ['Beberapa sekaligus', 'bensin 25rb, makan siang 30rb'], ['Pemasukan', 'gaji masuk bri 5jt'],
-        ['Pindah saldo', 'top up gopay 100rb dari bri'], ['Nabung (tunai → rekening)', 'nabung 500rb'], ['Atur saldo dompet', 'saldo bank sekarang 5jt'], ['Tanya', 'jajan bulan ini?'], ['Rincian', 'rincian jajan'], ['Uang ke mana', 'uangku habis ke mana saja'], ['Terbesar', 'pengeluaran terbesar minggu ini'], ['Rata-rata', 'rata-rata pengeluaran per hari'], ['Unduh laporan', 'unduh laporan bulan ini'], ['Batalkan', 'batal']];
+        ['Pindah saldo', 'top up gopay 100rb dari bri'], ['Nabung (tunai → rekening)', 'nabung 500rb'], ['Atur saldo dompet', 'saldo bank sekarang 5jt'], ['Tanya', 'jajan bulan ini?'], ['Rincian', 'rincian jajan'], ['Uang ke mana', 'uangku habis ke mana saja'], ['Terbesar', 'pengeluaran terbesar minggu ini'], ['Rata-rata', 'rata-rata pengeluaran per hari'], ['Unduh laporan', 'unduh laporan bulan ini'], ['Nonaktifkan anggaran', 'hapus anggaran jajan'], ['Batalkan', 'batal']];
       return {
         html: '<p>' + teksAman(m.data.teks || 'Cukup ketik seperti mengobrol. Contoh:') + '</p>' +
           contoh.map((c) => '<div class="ln" style="display:flex;justify-content:space-between;gap:8px;padding:4px 0"><span class="muted small">' + c[0] + '</span><button class="link small" data-isi="' + U.esc(c[1]) + '">' + U.esc(c[1]) + '</button></div>').join('') +
@@ -458,7 +458,7 @@
       case 'janggalUbah': await tandai(m, i); return g.EditTx.buka(v.txId, { dariChat: true });
       case 'nominal': {
         await tandai(m, i);
-        const d = m.data.draft; d.nominal = v.n; d.nominalRagu = false;
+        const d = m.data.draft; d.nominal = v.n; d.nominalRagu = false; delete d.nominalOpsi;
         Chat.pending = null;
         if (d.jenis === 'PINDAH' && d.dompetRagu) { Chat.antreKlar.unshift({ type: 'dompet', d, batch: m.data.batch, teksAsli: m.data.teksAsli }); return Chat.lanjutKlar(); }
         return Chat.selesaikanDraft(d, { batch: m.data.batch, teksAsli: m.data.teksAsli });
@@ -542,6 +542,7 @@
       case 'pakaiVersi': await tandai(m, i); return g.Asli && g.Asli.pakaiSekarang(v);
       case 'pnSesi': await tandai(m, i); return g.Penasihat.chip(v);
       case 'pn': return g.Penasihat.aksi(m, i, v, tandai);
+      case 'saldoUlang': case 'anggaranPilih': case 'anggaranYa': return g.Kelola.aksi(m, i, c, tandai);
       case 'rcLagi': return g.Rincian.jawab(v.it, '');
       case 'rcBulan': return g.Rincian.bulanLain(v);
       case 'targetHapusYa': await tandai(m, i); return g.Atur.targetHapusYa(v.id);
@@ -798,6 +799,8 @@
       case 'penasihatUbah': return g.Penasihat.ubahKondisi(it);
       case 'targetDaftar': return g.Atur.targetDaftar();
       case 'targetHapus': return g.Atur.targetHapus(it.kata);
+      case 'saldoUlang': return g.Kelola.saldoMulai(it, teks);
+      case 'anggaranStatus': return g.Kelola.anggaranStatus(it);
       case 'namaSet': return Chat.namaSet(it);
       case 'namaTanya': return Chat.namaTanya();
       case 'ingatanSimpan': return Chat.ingatanSimpan(it);
@@ -850,7 +853,7 @@
     drafts.forEach((d) => {
       if (d.pindahNonaktif) { pindahOff = true; return; }
       if (d.tanpaNominal) klar.push({ type: 'harga', d });
-      else if (d.nominalRagu && konfKecil) klar.push({ type: 'nominal', d });
+      else if (d.nominalOpsi || (d.nominalRagu && konfKecil)) klar.push({ type: 'nominal', d });
       else if (d.jenis === 'PINDAH' && d.dompetRagu) klar.push({ type: 'dompet', d });
       else if (d.tanyaJenis) klar.push({ type: 'jenisMasuk', d });
       else if (Chat.perluDompet(d)) tanyaD.push(d);
@@ -1110,13 +1113,17 @@
   const catatanId = (ids) => S.ingatanSaya().filter((x) => ids.indexOf(x.id_ingatan) > -1);
   /** Bagian label yang membedakan catatan dari kata yang ditanyakan ("istri", "vicky") */
   function pembeda(x, kata, semua) {
+    const s = pembedaDasar(x, kata);
+    // label kembar ("punyaku" / "PLN" dua kali) → bedakan dengan awal isinya
+    if ((semua || []).some((y) => y !== x && pembedaDasar(y, kata) === s)) return s + ' · ' + String(x.nilai).slice(0, 6) + (String(x.nilai).length > 6 ? '…' : '');
+    return s;
+  }
+  function pembedaDasar(x, kata) {
     const A = CC().kataKunci(x.label, S.ctxParser());
     const beda = A.filter((w) => w.g !== 'UMUM' && !(kata || []).some((k) => CC().miripKata(k, w.k)))
       .map((w) => (w.g === 'LEMBAGA' || /^(pln|pdam|bpjs|ktp|nik|npwp)$/.test(w.k) ? w.k.toUpperCase() : w.k));
     let s = Array.from(new Set(beda)).join(' ');
     if (!s) s = x.id_pengguna !== S.saya.id ? 'dari ' + S.orang(x.id_pengguna).nama : 'punyaku';
-    // dua catatan berlabel sama → bedakan dengan awal isinya
-    if ((semua || []).filter((y) => y !== x && y.label === x.label).length) s += ' · ' + String(x.nilai).slice(0, 6) + '…';
     return s;
   }
   const judulKata = (kata) => CC().tampil((kata || []).join(' '), S.ctxParser());
@@ -1368,10 +1375,11 @@
       return;
     }
     if (k.type === 'nominal') {
-      const besar = d.nominal * 1000;
-      await Chat.tambah({ kind: 'pilihan', data: { teks: d.keterangan + ': maksudnya ' + U.rp(besar) + ' atau ' + U.rp(d.nominal) + '?', draft: d, batch: k.batch, teksAsli: k.teksAsli,
-        chips: [{ label: U.rp(besar), aksi: 'nominal', nilai: { n: besar }, gaya: 'acc' }, { label: U.rp(d.nominal), aksi: 'nominal', nilai: { n: d.nominal } }] } });
-      Chat.pending = { type: 'nominal', jawab: async (n) => { d.nominal = n; d.nominalRagu = false; return Chat.selesaikanDraft(d, k); } };
+      const ops = d.nominalOpsi && d.nominalOpsi.length === 2 ? d.nominalOpsi : [d.nominal * 1000, d.nominal];
+      await Chat.tambah({ kind: 'pilihan', data: { teks: d.keterangan + ': maksudnya ' + U.rp(ops[0]) + ' atau ' + U.rp(ops[1]) + '?', draft: d, batch: k.batch, teksAsli: k.teksAsli,
+        sub: d.nominalOpsi ? 'Atau ketik angka lengkapnya, misalnya **' + U.rp(ops[1]).replace('Rp', '') + '**' : '',
+        chips: [{ label: U.rp(ops[0]), aksi: 'nominal', nilai: { n: ops[0] }, gaya: 'acc' }, { label: U.rp(ops[1]), aksi: 'nominal', nilai: { n: ops[1] } }] } });
+      Chat.pending = { type: 'nominal', jawab: async (n) => { d.nominal = n; d.nominalRagu = false; delete d.nominalOpsi; return Chat.selesaikanDraft(d, k); } };
       return;
     }
     if (k.type === 'dompet') {

@@ -176,6 +176,19 @@ Claude akan memandu tahap ini satu per satu di percakapan.
 
 ## Memperbarui aplikasi
 
+> **Pembaruan 1.0.19 (atur ulang saldo, nonaktif anggaran lewat chat, perbaikan nominal)**: **hanya tampilan**. Kode.gs tidak perlu diganti, dan tidak ada APK baru (folder `_android` sama dengan 1.0.18). Cukup push, lalu HP ikut terbarui otomatis.
+> - **Atur ulang saldo (khusus Admin):**
+>   - Lewat chat: *reset saldo*, *nolkan saldo gopay*, *saldo semua dompet jadi nol*, *atur ulang saldo bank jadi 2 juta*.
+>   - Lewat **Pengaturan → Kelola Dompet → Atur ulang saldo**.
+>   - Selalu muncul peringatan dan harus mengetik **ATUR ULANG**. Riwayat transaksi tetap ada.
+> - **Nonaktifkan anggaran lewat chat:**
+>   - Contoh: *hapus anggaran jajan*, *hapus anggaran jajan dan makan*, *nonaktifkan semua anggaran*, *anggaran transport ga usah*.
+>   - Selalu ditanya *Yakin mau menonaktifkan…?* dulu.
+>   - Bisa diaktifkan lagi: *aktifkan anggaran jajan* atau tombol **Aktifkan lagi**.
+> - **Nominal:**
+>   - *1 juta 550* = Rp1.550.000, *2 juta 750 ribu* = Rp2.750.000, *15 ribu 500* = Rp15.500, *1 juta 2 ratus* = Rp1.200.000.
+>   - Yang ragu, misalnya *2 juta 50* (Rp2.500.000 atau Rp2.050.000), ditanyakan dulu.
+>
 > **Pembaruan 1.0.18 (pembaruan otomatis, tombol kembali, latar chat + semua isi 1.0.17)**: Kode.gs **tidak** perlu diganti. Folder `_android` berubah, jadi setelah push akan terbit **APK baru** di Releases (±5–10 menit).
 > - Pasang APK baru itu **di atas** aplikasi lama (jangan hapus aplikasinya). Data tetap aman.
 > - **Tombol kembali bawaan HP** sekarang menutup lembar/jendela yang terbuka dulu, lalu mundur ke halaman sebelumnya, lalu ke chat. Di chat, aplikasi hanya dikecilkan (tidak ditutup). Bagian ini butuh APK baru.
