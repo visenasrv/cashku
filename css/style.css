@@ -441,6 +441,9 @@ textarea.input { height: auto; min-height: 96px; padding: 12px 14px; resize: ver
 .chat-page.ada-latar .chat-bottom .chip:not(.acc) { box-shadow: var(--sh-1); }
 .latar-prev { width: 64px; height: 96px; border-radius: 10px; flex: none; border: 1px solid var(--line); background-color: var(--chat-bg); background-image: radial-gradient(var(--chat-dot) 1.2px, transparent 1.4px); background-size: 10px 10px; }
 .latar-prev.ada { background-size: cover; background-position: center; }
+.latar-prev { position: relative; display: grid; place-items: center; }
+.latar-prev.muat::after { content: ''; position: absolute; inset: 0; border-radius: inherit; background: var(--scrim); }
+.latar-prev .spin { position: relative; z-index: 1; width: 26px; height: 26px; border: 3px solid #fff; border-right-color: transparent; border-radius: 50%; animation: spin .7s linear infinite; }
 label.btn { cursor: pointer; }
 label.btn.sibuk { opacity: .6; pointer-events: none; }
 .spin-sm { width: 14px; height: 14px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: spin .7s linear infinite; flex: none; display: inline-block; }

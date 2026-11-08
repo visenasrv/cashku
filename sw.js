@@ -2,7 +2,7 @@
 /* global importScripts, self, caches, indexedDB, clients */
 importScripts('js/config.js');
 
-const VERSI = 'cashku-1.0.17';
+const VERSI = 'cashku-1.0.18';
 const ASET = [
   './', 'index.html', 'manifest.webmanifest', 'css/style.css',
   'js/config.js', 'js/icons.js', 'js/util.js', 'js/db.js', 'js/api.js', 'js/state.js', 'js/parser.js', 'js/sync.js',

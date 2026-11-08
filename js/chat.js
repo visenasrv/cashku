@@ -108,13 +108,27 @@
       if (Chat.Latar.url) Chat.el.style.setProperty('--latar-img', 'url("' + Chat.Latar.url + '")');
       else Chat.el.style.removeProperty('--latar-img');
     },
+    sibuk: false,
     async pasang(file) {
       if (!file || !/^image\//.test(file.type || 'image/')) throw new Error('Pilih file gambar.');
       const uid = S.saya && S.saya.id; if (!uid) return;
-      const blob = await kecilkan(file);
+      // Gambar dari galeri kadang belum siap dibaca di percobaan pertama (mis. masih diunduh dari cloud) → coba sekali lagi
+      let blob;
+      try { blob = await kecilkan(file); }
+      catch (e) { await new Promise((r) => setTimeout(r, 600)); blob = await kecilkan(file); }
       const buf = await new Response(blob).arrayBuffer();
-      await g.DB.latar.set(uid, { buf: buf, type: blob.type, diubah: Date.now() });
+      if (!buf.byteLength) throw new Error('Gambar tidak bisa diproses.');
+      // Tampilkan langsung, lalu pastikan tersimpan di HP (dibaca ulang)
       Chat.Latar._uid = uid; Chat.Latar._set(blob);
+      let ok = false;
+      for (let i = 0; i < 2 && !ok; i++) {
+        try {
+          await g.DB.latar.set(uid, { buf: buf, type: blob.type, diubah: Date.now() });
+          const v = await g.DB.latar.get(uid);
+          ok = !!(v && v.buf && v.buf.byteLength === buf.byteLength);
+        } catch (e) { ok = false; }
+      }
+      if (!ok) throw new Error('Latar terpasang, tapi belum tersimpan di HP. Coba sekali lagi.');
     },
     async hapus() {
       const uid = S.saya && S.saya.id; if (!uid) return;

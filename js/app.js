@@ -79,6 +79,26 @@
       if (ada) await App.mulaiSesi();
       UI.Router.route();
       if (g.Asli && g.Asli.aktif()) g.Asli.sehat(); else App.daftarSW();
+      // Beri tahu sekali setelah CashKu diperbarui otomatis
+      try {
+        const lama = localStorage.getItem('cashku_versi_terakhir');
+        localStorage.setItem('cashku_versi_terakhir', U.VERSI);
+        if (lama && lama !== U.VERSI && S.saya) setTimeout(() => UI.Toast.show('CashKu diperbarui ke v' + U.VERSI + ' ✨', 'success'), 900);
+      } catch (e) { /* abaikan */ }
+    },
+    /** Pembaruan otomatis hanya dipakai bila tidak ada yang sedang diketik/diisi (teks & isian tidak hilang) */
+    bolehMuatUlang() {
+      if (document.querySelector('.sheet')) return false;
+      if (UI.memilihFile || (g.Chat && g.Chat.Latar && g.Chat.Latar.sibuk)) return false;   // sedang memilih/memproses gambar
+      if (g.Atur && g.Atur.aktif && g.Atur.aktif()) return false;
+      if (g.Penasihat && g.Penasihat.aktif && g.Penasihat.aktif()) return false;
+      const isian = document.querySelectorAll('#app input, #app textarea');
+      for (let i = 0; i < isian.length; i++) {
+        const el = isian[i], tp = String(el.type || '').toLowerCase();
+        if (['checkbox', 'radio', 'color', 'file', 'hidden', 'button', 'submit', 'range'].indexOf(tp) > -1 || el.closest('[hidden]')) continue;
+        if (el.value !== el.defaultValue) return false;
+      }
+      return true;
     },
     async mulaiSesi() {
       g.Sync.mulai();
@@ -158,11 +178,22 @@
 
     daftarSW() {
       if (!('serviceWorker' in navigator) || location.protocol === 'file:') return;
+      // 1.0.18: versi baru dipakai otomatis saat CashKu ditinggalkan (pindah aplikasi / HP dikunci), tanpa menekan tombol
+      const pakaiDiam = (reg) => {
+        if (!reg || !reg.waiting || !navigator.serviceWorker.controller || document.visibilityState !== 'hidden' || !App.bolehMuatUlang()) return;
+        App._mauPerbarui = true;
+        reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+      };
       navigator.serviceWorker.register('sw.js').then((reg) => {
+        App._reg = reg;
         if (reg.waiting && navigator.serviceWorker.controller) App.tawarkanPembaruan(reg);
         reg.addEventListener('updatefound', () => {
           const nw = reg.installing;
-          if (nw) nw.addEventListener('statechange', () => { if (nw.state === 'installed' && navigator.serviceWorker.controller) App.tawarkanPembaruan(reg); });
+          if (nw) nw.addEventListener('statechange', () => { if (nw.state === 'installed' && navigator.serviceWorker.controller) { App.tawarkanPembaruan(reg); pakaiDiam(reg); } });
+        });
+        document.addEventListener('visibilitychange', () => {
+          if (document.visibilityState === 'visible') reg.update().catch(() => {});
+          else pakaiDiam(reg);
         });
         setInterval(() => reg.update().catch(() => {}), 30 * 60 * 1000);
       }).catch((e) => console.warn('SW gagal didaftarkan', e));

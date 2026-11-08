@@ -1,4 +1,4 @@
-/* CashKu — penghubung aplikasi Android (APK) — 1.0.16
+/* CashKu — penghubung aplikasi Android (APK) — 1.0.16 (pembaruan otomatis 1.0.18)
  * - Deteksi platform: APK → alarm asli Android; web/iPhone → notifikasi PWA + kalender (seperti sebelumnya)
  * - Sinkron pengingat ke alarm asli (berbunyi walau offline, HP terkunci, setelah HP dinyalakan ulang)
  * - Tanggapan dari layar alarm (Matikan / Tunda / Sudah bayar) dikirim ke server saat aplikasi dibuka
@@ -68,11 +68,23 @@
   // ------------------------------------------------------------------
   // Pembaruan tampilan tanpa APK baru
   // ------------------------------------------------------------------
+  // 1.0.18: diperiksa setiap aplikasi dibuka / kembali dibuka (paling sering tiap 15 menit; aset.json hanya ±1 KB).
+  // Versi yang sudah lengkap diunduh dipakai otomatis saat CashKu ditinggalkan (layar lain/HP dikunci),
+  // asalkan tidak ada yang sedang diketik atau diisi — tidak perlu menekan "Cek pembaruan".
+  const JEDA_CEK = 15 * 60e3;
+  let siapPakai = null;
   Asli.sehat = function () { if (Asli.aktif()) A().versiSehat().catch(() => {}); };
+  Asli.siapPakai = () => siapPakai;
+  Asli.pakaiOtomatis = function () {
+    if (!siapPakai || !Asli.aktif() || (g.App && g.App.bolehMuatUlang && !g.App.bolehMuatUlang())) return false;
+    const v = siapPakai; siapPakai = null;
+    A().pakaiVersi({ path: v.path, versi: v.versi, sekarang: true }).catch(() => {});
+    return true;
+  };
   Asli.cekPembaruan = async function (paksa) {
     if (!Asli.aktif() || navigator.onLine === false) return null;
     const terakhir = Number(simpan('cashku_cek_ui') || 0);
-    if (!paksa && Date.now() - terakhir < 6 * 3600e3) return null;
+    if (!paksa && Date.now() - terakhir < JEDA_CEK) return null;
     simpan('cashku_cek_ui', String(Date.now()));
     let info;
     try { info = await A().info(); } catch (e) { return null; }
@@ -84,16 +96,18 @@
       aset = await res.json();
     } catch (e) { return null; }
     if (!aset || !aset.versi || !Array.isArray(aset.berkas) || !Asli.lebihBaru(aset.versi, U.VERSI) || aset.versi === info.gagalVersi) return { terbaru: true, versi: U.VERSI };
-    if (simpan('cashku_ui_siap') === aset.versi) return { siap: aset.versi };
+    if (simpan('cashku_ui_siap') === aset.versi && simpan('cashku_ui_path')) {
+      siapPakai = { path: simpan('cashku_ui_path'), versi: aset.versi };
+      return { siap: aset.versi, path: siapPakai.path };
+    }
     try {
       const r = await A().unduhVersi({ url: info.urlPembaruan, versi: aset.versi, berkas: aset.berkas });
       await A().pakaiVersi({ path: r.path, versi: aset.versi, sekarang: false });
       simpan('cashku_ui_siap', aset.versi);
-      if (g.Chat) {
-        await g.Chat.tambah({ kind: 'pilihan', data: { teks: 'Tampilan CashKu **' + aset.versi + '** sudah diunduh ✨', sub: 'Dipakai otomatis saat aplikasi dibuka lagi.',
-          chips: [{ label: 'Pakai sekarang', aksi: 'pakaiVersi', nilai: { path: r.path, versi: aset.versi }, gaya: 'acc' }] } });
-      }
-      return { siap: aset.versi };
+      simpan('cashku_ui_path', r.path);
+      siapPakai = { path: r.path, versi: aset.versi };
+      if (document.visibilityState === 'hidden') Asli.pakaiOtomatis();
+      return { siap: aset.versi, path: r.path };
     } catch (e) { console.warn('Pembaruan tampilan gagal', e); return { gagal: true }; }
   };
   Asli.pakaiSekarang = async function (v) {
@@ -110,7 +124,10 @@
     mulai = true;
     document.documentElement.classList.add('apk');
     S.on('master', () => Asli.sinkronAlarm());
-    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { Asli.prosesAksi(); Asli.sinkronAlarm(); Asli.cekPembaruan(); } });
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') { Asli.prosesAksi(); Asli.sinkronAlarm(); Asli.cekPembaruan(); }
+      else Asli.pakaiOtomatis();
+    });
     Asli.sinkronAlarm(true);
     setTimeout(() => Asli.prosesAksi(), 800);
     setTimeout(() => Asli.cekPembaruan(), 4000);
@@ -183,7 +200,7 @@
       UI.tombolSibuk(e.currentTarget, false);
       if (!r) UI.Toast.show('Belum bisa memeriksa', 'warn', 'Pastikan HP tersambung internet.');
       else if (r.terbaru) UI.Toast.show('Tampilan sudah versi terbaru', 'success');
-      else if (r.siap) UI.Toast.show('Versi ' + r.siap + ' siap', 'success', 'Dipakai saat aplikasi dibuka lagi.');
+      else if (r.siap) { UI.Toast.show('Memperbarui ke versi ' + r.siap + '…', 'success'); siapPakai = null; setTimeout(() => Asli.pakaiSekarang({ path: r.path, versi: r.siap }), 600); }
       else UI.Toast.show('Pembaruan gagal diunduh', 'error', 'Coba lagi nanti.');
     };
     const ab = body.querySelector('[data-apk-baru]');

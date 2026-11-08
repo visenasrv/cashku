@@ -31,6 +31,7 @@
         const sw = e.target.closest('[data-warna]');
         if (sw) { simpanWarna(sw.dataset.warna, el); return; }
         if (e.target.closest('[data-warna-bawaan]')) { simpanWarna('', el); return; }
+        if (e.target.closest('[data-latar-pilih]')) { pilihLatar(el); return; }
         if (e.target.closest('[data-latar-hapus]')) { await g.Chat.Latar.hapus(); render(el); UI.Toast.show('Latar chat dikembalikan', 'success'); return; }
         const m = e.target.closest('[data-tema] button[data-v]');
         if (m) { UI.Tema.setMode(m.dataset.v); render(el); return; }
@@ -46,13 +47,6 @@
       });
       el.addEventListener('change', async (e) => {
         if (e.target.dataset.custom !== undefined) { simpanWarna(e.target.value.toUpperCase(), el); return; }
-        if (e.target.dataset.latarFile !== undefined && e.target.files && e.target.files[0]) {
-          const lbl = el.querySelector('[data-latar-pilih]');
-          if (lbl) lbl.classList.add('sibuk');
-          try { await g.Chat.Latar.pasang(e.target.files[0]); UI.Toast.show('Latar chat diganti', 'success', 'Hanya tersimpan di HP ini.'); }
-          catch (er) { UI.Toast.show('Gambar tidak bisa dipakai', 'error', er.message); }
-          e.target.value = ''; render(el); return;
-        }
         if (e.target.dataset.fitur !== undefined) {
           const v = e.target.checked ? 'ON' : 'OFF';
           const res = await panggilOnline('pengaturanSimpan', { fitur_dompet: v });
@@ -65,6 +59,32 @@
     show(el) { render(el); },
     segarkan(el) { render(el); }
   });
+  // Ganti latar chat (1.0.18): kolom pilih-berkas dibuat di luar halaman, jadi tetap bekerja walau halaman Pengaturan
+  // digambar ulang saat kembali dari galeri (penyebab latar gagal di percobaan pertama). Selama diproses tampil loading.
+  function pilihLatar(el) {
+    const L = g.Chat && g.Chat.Latar;
+    if (!L || L.sibuk) return;
+    const inp = document.createElement('input');
+    inp.type = 'file'; inp.accept = 'image/*'; inp.hidden = true;
+    document.body.appendChild(inp);
+    UI.memilihFile = true;
+    let beres = false;
+    const selesai = () => { if (beres) return; beres = true; UI.memilihFile = false; inp.remove(); };
+    inp.addEventListener('cancel', selesai);
+    setTimeout(() => { if (!L.sibuk) selesai(); }, 10 * 60e3);   // pengaman bila galeri ditutup tanpa kabar
+    inp.addEventListener('change', async () => {
+      const f = inp.files && inp.files[0];
+      if (!f) { selesai(); return; }
+      L.sibuk = true;
+      render(el);
+      await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 50)));   // loading tampil dulu sebelum gambar diproses
+      try { await L.pasang(f); UI.Toast.show('Latar chat diganti', 'success', 'Hanya tersimpan di HP ini.'); }
+      catch (er) { UI.Toast.show('Gambar tidak bisa dipakai', 'error', (er && er.message) || 'Coba pilih gambar lain.'); }
+      finally { L.sibuk = false; selesai(); if (!el.hidden) render(el); }
+    });
+    inp.click();
+  }
+
   // Ganti warna (1.0.17): hanya untuk HP ini — disimpan di HP, tidak dikirim ke server, bisa dipakai tanpa internet
   let statusWarna = '', tWarna = 0;
   function simpanWarna(w, el) {
@@ -93,10 +113,11 @@
       '<div class="hr"></div><div class="row" style="margin-bottom:10px"><span class="ico-c sm">' + ic('moon', 'ic-sm') + '</span><b style="font-weight:500">Mode tampilan</b></div>' +
       '<div class="seg" data-tema>' + [['TERANG', 'Terang'], ['GELAP', 'Gelap'], ['OTOMATIS', 'Otomatis']].map((m) => '<button data-v="' + m[0] + '" class="' + (UI.Tema.mode() === m[0] ? 'on' : '') + '">' + m[1] + '</button>').join('') + '</div>' +
       (L ? '<div class="hr"></div><div class="row" style="margin-bottom:10px"><span class="ico-c sm">' + ic('image', 'ic-sm') + '</span><b style="font-weight:500">Latar chat</b></div>' +
-      '<div class="row" style="align-items:flex-start"><div class="latar-prev' + (L.url ? ' ada' : '') + '"' + (L.url ? ' style="background-image:url(' + L.url + ')"' : '') + '></div>' +
-      '<div class="grow"><div class="row" style="gap:8px;flex-wrap:wrap"><label class="btn sm soft" data-latar-pilih>' + ic('image-plus', 'ic-sm') + 'Pilih dari galeri<input type="file" accept="image/*" data-latar-file hidden></label>' +
-      (L.url ? '<button class="btn sm ghost" data-latar-hapus>Pakai bawaan</button>' : '') + '</div>' +
-      '<p class="small muted" style="margin:8px 0 0">Gambar hanya tersimpan di HP ini, tidak dikirim ke server atau database.</p></div></div>' : '') + '</div>';
+      '<div class="row" style="align-items:flex-start"><div class="latar-prev' + (L.url ? ' ada' : '') + (L.sibuk ? ' muat' : '') + '"' + (L.url ? ' style="background-image:url(' + L.url + ')"' : '') + '>' + (L.sibuk ? '<span class="spin"></span>' : '') + '</div>' +
+      '<div class="grow"><div class="row" style="gap:8px;flex-wrap:wrap"><button type="button" class="btn sm soft" data-latar-pilih' + (L.sibuk ? ' disabled aria-busy="true"' : '') + '>' +
+      (L.sibuk ? '<span class="spin-sm"></span>Memproses…' : ic('image-plus', 'ic-sm') + 'Pilih dari galeri') + '</button>' +
+      (L.url && !L.sibuk ? '<button class="btn sm ghost" data-latar-hapus>Pakai bawaan</button>' : '') + '</div>' +
+      '<p class="small ' + (L.sibuk ? 't-in' : 'muted') + '" style="margin:8px 0 0" role="status">' + (L.sibuk ? 'Sedang memasang latar, tunggu sebentar…' : 'Gambar hanya tersimpan di HP ini, tidak dikirim ke server atau database.') + '</p></div></div>' : '') + '</div>';
 
     // Pengingat & alarm + data yang diingat
     const PG = g.Pengingat;

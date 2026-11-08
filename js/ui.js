@@ -214,6 +214,22 @@
     return true;
   }
 
+  /** Tombol kembali bawaan HP (dipanggil APK Android). true = sudah ditangani di tampilan; false = aplikasi dikecilkan. */
+  g.CashKuKembali = function () {
+    try {
+      if (Sheet.stack.length) { Sheet.stack[Sheet.stack.length - 1].close(); return true; }
+      if (g.Suara && g.Suara.aktif && g.Suara.aktif()) { g.Suara.berhenti(); return true; }
+      const r = Router.saatIni;
+      if (r && r !== 'chat' && r !== 'login') {
+        Router.kembali();
+        // Bila riwayat browser kosong (mis. setelah dimuat ulang), langsung ke chat
+        setTimeout(() => { if (Router.saatIni === r) Router.go('chat', null, { ganti: true }); }, 350);
+        return true;
+      }
+      return false;
+    } catch (e) { return false; }
+  };
+
   g.UI = { ic, LOGO, LOGO_BESAR, Toast, Sheet, Router, Pages, header, Tema, inputRupiah, seg, segNilai, ava, tombolSibuk, perluOnline };
   g.ic = ic;
 })(window);

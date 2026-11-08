@@ -3,6 +3,9 @@ package com.cashku.keluarga;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.Bundle;
+import android.webkit.WebView;
+
+import androidx.activity.OnBackPressedCallback;
 
 import com.getcapacitor.BridgeActivity;
 
@@ -14,6 +17,24 @@ public class MainActivity extends BridgeActivity {
         amankanPembaruan();
         super.onCreate(savedInstanceState);
         try { Penjadwal.jadwalkanSemua(this); } catch (Exception ignored) { }
+        pasangTombolKembali();
+    }
+
+    /**
+     * Tombol kembali bawaan HP: ditanyakan dulu ke tampilan (tutup jendela/lembar yang terbuka, atau mundur ke halaman
+     * sebelumnya / chat). Bila sudah di chat, aplikasi hanya dikecilkan (tidak ditutup paksa), seperti aplikasi chat lain.
+     */
+    private void pasangTombolKembali() {
+        getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
+            @Override
+            public void handleOnBackPressed() {
+                WebView wv = getBridge() != null ? getBridge().getWebView() : null;
+                if (wv == null) { moveTaskToBack(true); return; }
+                wv.evaluateJavascript(
+                        "(function(){try{return window.CashKuKembali?String(window.CashKuKembali()):'false'}catch(e){return 'false'}})()",
+                        hasil -> { if (hasil == null || !hasil.contains("true")) moveTaskToBack(true); });
+            }
+        });
     }
 
     /**

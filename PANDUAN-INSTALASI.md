@@ -176,6 +176,19 @@ Claude akan memandu tahap ini satu per satu di percakapan.
 
 ## Memperbarui aplikasi
 
+> **Pembaruan 1.0.18 (pembaruan otomatis, tombol kembali, latar chat + semua isi 1.0.17)**: Kode.gs **tidak** perlu diganti. Folder `_android` berubah, jadi setelah push akan terbit **APK baru** di Releases (±5–10 menit).
+> - Pasang APK baru itu **di atas** aplikasi lama (jangan hapus aplikasinya). Data tetap aman.
+> - **Tombol kembali bawaan HP** sekarang menutup lembar/jendela yang terbuka dulu, lalu mundur ke halaman sebelumnya, lalu ke chat. Di chat, aplikasi hanya dikecilkan (tidak ditutup). Bagian ini butuh APK baru.
+> - **Ganti latar chat:** tampil loading (*Memproses…*) selama gambar dipasang, dan latar langsung berhasil di percobaan pertama.
+>
+> **Pembaruan otomatis:**
+> - CashKu memeriksa versi baru setiap kali dibuka atau kembali dibuka (paling sering tiap 15 menit).
+> - Versi baru dipakai **otomatis** saat CashKu ditinggalkan, misalnya pindah ke aplikasi lain atau HP dikunci. Saat dibuka lagi, CashKu sudah versi terbaru dan muncul pesan singkat *"CashKu diperbarui ke v…"*.
+> - Pembaruan ditunda bila sedang ada yang diketik/diisi, atau sesi pengaturan/penasihat sedang berjalan, supaya isian tidak hilang.
+> - Berlaku di APK Android dan di CashKu yang dibuka dari browser/layar utama.
+> - **Catatan:** APK baru 1.0.18 sudah membawa tampilan 1.0.18, jadi setelah dipasang semuanya otomatis. HP yang memakai CashKu lewat browser menerima 1.0.18 dengan cara lama (banner **Muat ulang**) satu kali ini, lalu berikutnya otomatis.
+> - APK baru (hanya bila folder `_android` berubah) tetap harus dipasang manual dari Releases. Android tidak mengizinkan aplikasi di luar Play Store memasang dirinya sendiri tanpa persetujuan pemilik HP.
+>
 > **Pembaruan 1.0.17 (rincian lewat chat, warna per HP, tombol pasang)**: **hanya tampilan** yang berubah.
 > - Server (`Kode.gs`) **tidak perlu** diganti dan tidak perlu deploy ulang.
 > - Cukup ekstrak ZIP ke folder repo lalu push. APK di HP ikut terbarui sendiri (tidak perlu APK baru).

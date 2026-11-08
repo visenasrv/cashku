@@ -121,9 +121,9 @@ Lalu ketuk **Tes alarm sekarang** dan **kunci layar**. Alarm berbunyi 10 detik k
 **Cara kerjanya:**
 
 1. Tampilan CashKu **dibundel di dalam APK**, sehingga selalu bisa dibuka walau offline.
-2. Saat online, APK memeriksa `aset.json` di GitHub Pages (paling sering tiap 6 jam, atau lewat **Alarm Android → Cek pembaruan tampilan**).
+2. Saat online, APK memeriksa `aset.json` di GitHub Pages setiap kali CashKu dibuka atau kembali dibuka (paling sering tiap 15 menit). Bisa juga lewat **Alarm Android → Cek pembaruan tampilan**.
 3. Bila versinya lebih baru, semua berkas diunduh ke penyimpanan aplikasi. Versi baru baru dipakai bila unduhan **lengkap**.
-4. Versi baru dipakai saat aplikasi dibuka lagi, atau langsung lewat tombol **Pakai sekarang** di chat.
+4. Versi baru dipakai **otomatis** saat CashKu ditinggalkan (pindah aplikasi atau HP dikunci). Bila sedang ada yang diketik/diisi, pembaruan ditunda sampai lain kali.
 
 Jadi untuk update fitur biasa: cukup push ZIP tampilan seperti biasa. APK di HP ikut terbarui sendiri.
 
@@ -137,6 +137,14 @@ Jadi untuk update fitur biasa: cukup push ZIP tampilan seperti biasa. APK di HP 
 | Data di HP | Tidak terpengaruh. Data tersimpan terpisah dari berkas tampilan |
 
 Setiap APK baru selalu membawa tampilan terbaru saat dibangun, jadi tidak ada versi yang "tertinggal".
+
+---
+
+## 6b. Tombol kembali HP (1.0.18)
+
+- Bila ada lembar/jendela terbuka, tombol kembali menutupnya dulu.
+- Bila sedang di halaman lain (Pengaturan, Laporan, dan lainnya), tombol kembali mundur ke halaman sebelumnya, lalu ke chat.
+- Di chat, aplikasi hanya dikecilkan (seperti WhatsApp), tidak ditutup.
 
 ---
 
