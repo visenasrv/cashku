@@ -81,14 +81,23 @@
       '<canvas class="bar-chart" data-bar></canvas>' +
       '<div class="banner" style="margin-top:12px;padding:10px 12px">' + ic('trending-up') + '<span class="grow small">' + (surplus >= 0 ? 'Surplus' : 'Defisit') + ' rata-rata per bulan</span><b class="num ' + (surplus >= 0 ? 't-in' : 't-out') + '">' + U.rpSelisih(surplus) + '</b></div></div>';
 
-    // Saldo dompet
-    if (S.fiturDompet()) {
+    // Saldo dompet (dompet nonaktif → "Uang" gabungan + Tabungan)
+    if (!S.fiturDompet()) {
+      const sr = S.saldoRingkas();
+      if (sr.length) {
+        const tot = sr.reduce((a, x) => a + x.saldo, 0);
+        h += '<div class="row" style="margin:20px 0 8px;align-items:flex-end"><div class="grow"><div class="fam-title" style="font-size:18px">Saldo</div><div class="small muted">Uang & tabungan</div></div>' +
+          '<div style="text-align:right"><div class="small muted">Total</div><b class="num" style="font-size:17px;color:var(--primary)">' + (tot < 0 ? '−' : '') + U.rp(tot) + '</b></div></div>' +
+          '<div class="hscroll">' + sr.map((x) => '<div class="card wallet-card"><div class="row"><span class="ico-c sm">' + U.esc(x.ikon) + '</span><span class="badge b-slate">' + (x.id === 'UANG' ? 'Gabungan' : 'Tabungan') + '</span></div>' +
+            '<div class="nm ellip">' + U.esc(x.nama) + '</div><div class="v num ' + (x.saldo < 0 ? 't-out' : '') + '">' + (x.saldo < 0 ? '−' : '') + U.rp(x.saldo) + '</div></div>').join('') + '</div>';
+      }
+    } else {
       const sd = S.saldoDompet();
       if (sd.length) {
         const tot = sd.reduce((a, x) => a + x.saldo, 0);
         h += '<div class="row" style="margin:20px 0 8px;align-items:flex-end"><div class="grow"><div class="fam-title" style="font-size:18px">Saldo Dompet</div><div class="small muted">Tunai, rekening & e-wallet</div></div>' +
           '<div style="text-align:right"><div class="small muted">Total Saldo</div><b class="num" style="font-size:17px;color:var(--primary)">' + (tot < 0 ? '−' : '') + U.rp(tot) + '</b></div></div>' +
-          '<div class="hscroll">' + sd.map((x) => '<div class="card wallet-card"><div class="row"><span class="ico-c sm">' + U.esc(x.dompet.ikon || '💳') + '</span><span class="badge b-slate">' + ({ TUNAI: 'Fisik', REKENING: 'Bank', EWALLET: 'Digital' })[x.dompet.tipe] + '</span></div>' +
+          '<div class="hscroll">' + sd.map((x) => '<div class="card wallet-card"><div class="row"><span class="ico-c sm">' + U.esc(x.dompet.ikon || '💳') + '</span><span class="badge b-slate">' + ({ TUNAI: 'Fisik', REKENING: 'Bank', EWALLET: 'Digital', TABUNGAN: 'Tabungan' })[x.dompet.tipe] || 'Dompet' + '</span></div>' +
             '<div class="nm ellip">' + U.esc(x.dompet.nama) + '</div><div class="v num ' + (x.saldo < 0 ? 't-out' : '') + '">' + (x.saldo < 0 ? '−' : '') + U.rp(x.saldo) + '</div></div>').join('') + '</div>';
       }
     }

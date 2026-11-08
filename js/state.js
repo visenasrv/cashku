@@ -42,6 +42,7 @@
     S.meta.sejak = Number(boot.serverNow) - 120000;
     S.meta.jendelaMulai = boot.jendelaMulai;
     S.meta.basisSaldo = boot.basisSaldo || {};
+    S.meta.resetKe = boot.resetKe || '';
     S.meta.lastSync = Date.now();
     const lokal = Array.from(S.tx.values()).filter((t) => S.outbox.has('tx:' + t.id_transaksi));
     S.tx = new Map();
@@ -50,6 +51,17 @@
     S._peta = null;
     await g.DB.putMany('tx', Array.from(S.tx.values()));
     await Promise.all([S.simpanSesi(), S.simpanMaster(), S.simpanMeta()]);
+  };
+
+  /** 1.0.20: CashKu direset Admin → hapus data di HP ini (sesi tetap masuk), lalu ambil data baru dari server */
+  S.terapkanReset = async function () {
+    S.tx = new Map(); S.outbox = new Map(); S.chat = [];
+    S.meta.warn = {}; S.meta.sejak = 0; S.meta.verMaster = ''; S.meta.basisSaldo = {};
+    await g.DB.kosongkan(['tx', 'outbox', 'chat']);
+    const res = await g.API.api('bootstrap', {});
+    if (!res.success) { await S.simpanMeta(); throw new Error(res.message || 'Gagal mengambil data baru.'); }
+    await S.terapkanBoot(null, res.data);
+    S.emit('master'); S.emit('tx', []); S.emit('outbox');
   };
 
   S.keluar = async function () {
@@ -81,6 +93,11 @@
   S.lihatSemua = () => !!S.saya && (S.saya.peran !== 'ANAK' || S.saya.izin_lihat === 'SEMUA');
   S.bolehUbahTx = (t) => !!S.saya && (t.id_pengguna === S.saya.id || S.isAdmin());
   S.fiturDompet = () => String(S.master.pengaturan.fitur_dompet || 'ON') === 'ON';
+  /** 1.0.21: saat fitur dompet nonaktif, transaksi tetap dicatat ke dompet utama (Tunai/Rekening/E-wallet digabung jadi "Uang"); Tabungan tetap terpisah */
+  S.dompetUtama = function () {
+    const xs = S.master.dompet.filter((d) => d.aktif !== false && d.tipe !== 'TABUNGAN');
+    return (S.saya && xs.find((d) => d.id_dompet === S.saya.id_dompet_default)) || xs.find((d) => d.tipe === 'TUNAI') || xs[0] || null;
+  };
   S.namaKeluarga = () => 'Keluarga';                 // tampilan cukup "Keluarga", tanpa nama keluarga
   /** Judul transaksi untuk tampilan: pindah saldo dari nabung ditampilkan sebagai "Nabung" */
   S.judulTx = (t) => t.jenis === 'SALDO' ? 'Penyesuaian saldo' : t.jenis !== 'PINDAH' ? t.keterangan
@@ -102,7 +119,7 @@
     return {
       versi: S.meta.verMaster + ':' + S.master.kamus.length + ':' + S.master.kategori.length + ':' + S.master.dompet.length + ':' + (S.master.typo || []).length,
       kategori: S.master.kategori, kamus: S.master.kamus, dompet: S.dompetAktif(), anggota: S.master.anggota,
-      saya: S.saya, fiturDompet: S.fiturDompet(), hariIni: U.hariIni(),
+      saya: S.saya, fiturDompet: S.fiturDompet(), dompetUtama: (S.dompetUtama() || {}).id_dompet || '', hariIni: U.hariIni(),
       kategoriDefaultKeluar: S.kategoriDefault('KELUAR'), kategoriDefaultMasuk: S.kategoriDefault('MASUK'),
       riwayat: S.riwayatKata,
       typo: S.master.typo || [], aturan: S.master.aturan || {}, ingatan: S.ingatanSaya(), aliasCatatan: S.master.alias || [], pemicu: (S.master.penasihat || {}).pemicu || []
@@ -115,7 +132,7 @@
     const h = String(u.hubungan || '').toUpperCase();
     if (h === 'SUAMI') return 'Pak';
     if (h === 'ISTRI') return 'Bu';
-    if (h === 'ANAK' || u.peran === 'ANAK') return '';
+    if (h === 'ANAK' || h === 'LAINNYA' || u.peran === 'ANAK') return '';
     return null;
   };
   /** "Pak Dani", "Bu Sinta", "Ibu" (tanpa nama), "Rafi" (anak) */
@@ -405,6 +422,28 @@
       });
       return { dompet: d, saldo: s };
     });
+  };
+
+  /** Saldo transaksi lama yang tercatat tanpa dompet (dihitung ke "Uang" saat fitur dompet nonaktif) */
+  S.saldoTanpaDompet = function () {
+    const mulai = S.meta.jendelaMulai || '0000-00-00';
+    let s = Number((S.meta.basisSaldo || {})['']) || 0;
+    S.tx.forEach((t) => {
+      if (t.status !== 'AKTIF' || t.tanggal_transaksi < mulai) return;
+      if (!t.id_dompet && t.jenis === 'MASUK') s += t.nominal;
+      else if (!t.id_dompet && t.jenis === 'KELUAR') s -= t.nominal;
+      else if (!t.id_dompet && t.jenis === 'SALDO') s += t.nominal;
+      else if (t.jenis === 'PINDAH') { if (!t.id_dompet) s -= t.nominal; if (!t.id_dompet_tujuan) s += t.nominal; }
+    });
+    return s;
+  };
+  /** Saldo untuk ditampilkan. Dompet aktif → per dompet. Nonaktif → "Uang" (Tunai + Rekening + E-wallet) dan Tabungan. */
+  S.saldoRingkas = function () {
+    const per = S.saldoDompet();
+    const ubah = (x) => ({ id: x.dompet.id_dompet, nama: x.dompet.nama, ikon: x.dompet.ikon || '💳', tipe: x.dompet.tipe, saldo: x.saldo, dompet: x.dompet });
+    if (S.fiturDompet()) return per.map(ubah);
+    const uang = per.filter((x) => x.dompet.tipe !== 'TABUNGAN').reduce((a, x) => a + x.saldo, 0) + S.saldoTanpaDompet();
+    return [{ id: 'UANG', nama: 'Uang', ikon: '💰', tipe: 'UANG', saldo: uang }].concat(per.filter((x) => x.dompet.tipe === 'TABUNGAN').map(ubah));
   };
 
   S.rentangAnggaran = function (a, ref) {

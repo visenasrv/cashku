@@ -70,7 +70,8 @@
       let putaran = 0;
       while (S.outbox.size && putaran++ < 20) {
         const ops = Array.from(S.outbox.values()).sort((a, b) => a.t - b.t).slice(0, BATCH);
-        const res = await g.API.api('sinkronKirim', { ops: ops.map((o) => ({ op_id: o.op_id, type: o.type, data: o.data, baseVersi: o.baseVersi })) });
+        const res = await g.API.api('sinkronKirim', { resetKe: S.meta.resetKe || '', ops: ops.map((o) => ({ op_id: o.op_id, type: o.type, data: o.data, baseVersi: o.baseVersi })) });
+        if (!res.success && res.data && res.data.code === 'RESET') { await Sync.terapkanReset(false); return false; }
         if (!res.success) {
           if (res.network) { Sync.setStatus(navigator.onLine === false ? 'offline' : 'error', res.message); Sync.daftarLatar(); }
           else Sync.setStatus('error', res.message);
@@ -131,6 +132,7 @@
         return false;
       }
       const d = res.data;
+      if (d.resetKe !== undefined && String(d.resetKe || '') !== String(S.meta.resetKe || '')) { await Sync.terapkanReset(false); return false; }
       const hasil = await S.terimaTxServer(d.tx || []);
       if (d.master) { S.meta.verMaster = d.verMaster; await S.gantiMasterDariServer(d.master, d.saya); }
       S.meta.sejak = Number(d.serverNow) - 120000;
@@ -144,6 +146,20 @@
         });
       }
       return true;
+    },
+
+    /** 1.0.20: server sudah direset Admin → data di HP ini dikosongkan & diganti data baru */
+    async terapkanReset(olehSaya) {
+      try {
+        await S.terapkanReset();
+        S.meta.lastSync = Date.now(); await S.simpanMeta();
+        Sync.setStatus('ok');
+        if (g.Chat) {
+          if (g.Chat.renderSemua) g.Chat.renderSemua();
+          await g.Chat.sistem(olehSaya ? '🔄 CashKu sudah direset. Semua catatan dimulai dari awal lagi.' : '🔄 CashKu sudah direset oleh Admin. Semua catatan dimulai dari awal lagi.', true);
+        }
+        if (g.UI && g.UI.Router) g.UI.Router.segarkan();
+      } catch (e) { Sync.setStatus('error', e.message); }
     },
 
     /** Tarik data terbaru sebelum membuat PDF (bila online) */

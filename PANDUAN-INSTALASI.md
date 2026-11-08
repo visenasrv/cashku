@@ -176,6 +176,32 @@ Claude akan memandu tahap ini satu per satu di percakapan.
 
 ## Memperbarui aplikasi
 
+> **Pembaruan 1.0.21 (semua isi 1.0.19–1.0.20 + perbaikan di bawah)**: ganti `Kode.gs` → **Simpan** → **Kelola deployment → Edit → Versi baru → Terapkan**, lalu push ZIP. Tidak ada APK baru.
+> - **Admin bukan "kepala keluarga" lagi.**
+>   - Peran di CashKu: **Admin** (boleh ayah atau ibu), **Dewasa**, atau **Anak**.
+>   - Sapaan (Pak / Bu / nama saja) ditanyakan terpisah.
+> - **Jawaban kategori boleh diketik.**
+>   - Contoh: setelah *Masuk kategori apa?*, ketik *makan*, *jajanan*, atau *transport* (salah ketik sedikit tetap dipahami).
+>   - Jawaban yang diketik sama dengan tombol juga dianggap menekan tombol itu.
+> - **Kosakata kategori bertambah ±960 kata.** Contoh: sate, rendang, kecap, cabe, meja, ukt, daster, karaoke, kpr. Database lama otomatis mendapat kata baru saat pertama login setelah update (`migrasiData` berjalan sendiri). Kata yang sudah diajarkan sendiri tidak diubah.
+> - **Fitur dompet nonaktif:** Tunai, rekening, dan e-wallet digabung jadi **Uang**, sedangkan **Tabungan** tetap terpisah.
+>   - Saldo tetap dihitung, termasuk *nabung* dan *ambil tabungan*.
+>   - *saldo sekarang 3jt* menyesuaikan saldo Uang.
+> - *sisa uang?* sekarang menjawab saldo, bukan anggaran.
+>
+> **Pembaruan 1.0.20 (Reset CashKu + semua isi 1.0.19)**: **server dan tampilan** berubah. Tidak ada APK baru.
+> 1. Apps Script → ganti seluruh isi `Kode.gs` → **Simpan**.
+> 2. **Deploy → Manage deployments → ikon pensil (Edit) → Version: New version → Deploy**. Alamat /exec tetap sama dan tidak perlu menjalankan `migrasiData`.
+> 3. Push isi ZIP ke GitHub. HP ikut terbarui otomatis.
+>
+> **Reset CashKu** ada di **Pengaturan → Zona berbahaya → Reset CashKu** dan hanya tampil untuk Admin.
+> - **Dihapus:** semua riwayat transaksi, saldo semua dompet (jadi Rp0), pengingat, anggaran, catatan yang diingat, target tabungan & data Penasihat, dan riwayat chat di semua HP.
+> - **Tetap:** akun anggota, kategori, kata yang sudah dipelajari, nama dompet, dan pengaturan.
+> - Aplikasi menanyakan dulu apakah perlu membuat **cadangan** Google Sheet. Cadangan disimpan di folder CashKu di Drive dengan nama *Cadangan CashKu tanggal jam*.
+> - Wajib mengisi **password Admin**. Setelah 5 kali salah, reset dikunci selama 15 menit.
+> - HP anggota lain otomatis ikut kosong saat sinkron berikutnya. Catatan lama yang belum terkirim dari HP lain tidak akan muncul lagi.
+> - Lewat chat (*reset cashku*), CashKu hanya mengarahkan ke Pengaturan.
+>
 > **Pembaruan 1.0.19 (atur ulang saldo, nonaktif anggaran lewat chat, perbaikan nominal)**: **hanya tampilan**. Kode.gs tidak perlu diganti, dan tidak ada APK baru (folder `_android` sama dengan 1.0.18). Cukup push, lalu HP ikut terbarui otomatis.
 > - **Atur ulang saldo (khusus Admin):**
 >   - Lewat chat: *reset saldo*, *nolkan saldo gopay*, *saldo semua dompet jadi nol*, *atur ulang saldo bank jadi 2 juta*.

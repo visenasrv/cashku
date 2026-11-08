@@ -16,7 +16,7 @@
   const fp = (x) => H().fp(x);
   const admin = () => !!S.saya && S.saya.peran === 'ADMIN';
   const sapa = () => (S.sapa ? S.sapa() : '');
-  const namaAdmin = () => (S.anggotaAktif().find((a) => a.peran === 'ADMIN') || {}).nama || 'kepala keluarga';
+  const namaAdmin = () => (S.anggotaAktif().find((a) => a.peran === 'ADMIN') || {}).nama || 'Admin';
   const M = () => S.master.penasihat || {};
   const salin = (x) => JSON.parse(JSON.stringify(x || {}));
   const WARNA = { kebutuhan: '#2563EB', keinginan: '#F59E0B', tabungan: '#16A34A' };
@@ -286,7 +286,7 @@
     chips.push({ label: 'Ubah angka', aksi: 'pn', nilai: { aksi: 'ubah' } });
     chips.push({ label: 'Tutup', aksi: 'pn', nilai: { aksi: 'tutup' }, gaya: 'ghost' });
     return Chat().tambah({ kind: 'saran', data: { mode: 'hasil', profil, hasil, asumsi: opsi.asumsi || [], idR, chips,
-      catatan: admin() ? '' : 'Hanya kepala keluarga (' + namaAdmin() + ') yang bisa menerapkan saran ini ke anggaran.' } });
+      catatan: admin() ? '' : 'Hanya Admin (' + namaAdmin() + ') yang bisa menerapkan saran ini ke anggaran.' } });
   };
   const persenTeks = (x) => fp(x) + '%';
   function barisRincian(r) {
@@ -391,7 +391,7 @@
   /** opsi: { yakin (sudah dikonfirmasi), bulanDepan, idR } */
   Pn.terapkan = async function (profil, opsi) {
     opsi = opsi || {};
-    if (!admin()) return Chat().sistem('Maaf' + (sapa() ? ', ' + sapa() : '') + ' 🙏 Hanya kepala keluarga (' + namaAdmin() + ') yang bisa menerapkan saran ke anggaran.');
+    if (!admin()) return Chat().sistem('Maaf' + (sapa() ? ', ' + sapa() : '') + ' 🙏 Hanya Admin (' + namaAdmin() + ') yang bisa menerapkan saran ke anggaran.');
     const peta = petaKategori();
     const belum = S.kategoriAktif('KELUAR').filter((k) => !peta[k.id_kategori]);
     if (belum.length) { tunda = { profil, opsi }; return tanyaPeta(belum[0], belum.length); }
@@ -452,7 +452,7 @@
     return Chat().tambah({ kind: 'pilihan', data: { teks: (opsi.otomatis ? 'Bulan baru, angka baru dari penasihat sudah aku terapkan ✅\n' : 'Sudah diterapkan ✅\n') + baris.join('\n'),
       sub: 'Aku ingatkan kalau anggaran kategori sudah terpakai 80%.', chips: [{ label: 'Sisa anggaran', aksi: 'kirim', nilai: { teks: 'sisa anggaran' } }, { label: 'Lihat target', aksi: 'kirim', nilai: { teks: 'lihat target' } }] } });
   }
-  /** Rencana "mulai bulan depan" → diterapkan otomatis saat bulan berganti (di HP kepala keluarga) */
+  /** Rencana "mulai bulan depan" → diterapkan otomatis saat bulan berganti (di HP Admin) */
   let cekJalan = false;
   Pn.cekTertunda = async function () {
     if (cekJalan || !admin()) return;
@@ -517,7 +517,7 @@
     if (admin() && o.alternatif) chips.push({ label: 'Kelonggaran ke keinginan', aksi: 'pn', nilai: { aksi: 'keKeinginan' } });
     if (admin() && o.keTabungan) chips.push({ label: 'Kelonggaran ke tabungan', aksi: 'pn', nilai: { aksi: 'keTabungan' } });
     return Chat().tambah({ kind: 'saran', data: { mode: 'banding', judul, profilLama: lama, profil: baru, sebelum: a, sesudah: b, kelonggaran: o.kelonggaran || '', alternatif: o.alternatif || null, keTabungan: o.keTabungan || null, kelRp: o.kelRp || 0, idR, chips,
-      catatan: admin() ? '' : 'Hanya kepala keluarga (' + namaAdmin() + ') yang bisa mengubah anggaran.' } });
+      catatan: admin() ? '' : 'Hanya Admin (' + namaAdmin() + ') yang bisa mengubah anggaran.' } });
   }
 
   // ------------------------------------------------------------------

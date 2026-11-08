@@ -1,7 +1,7 @@
 /* CashKu — Pengaturan lewat chat (1.0.14)
  * Satu pertanyaan per pesan + tombol jawaban cepat. Selama sesi aktif, pesan dibaca sebagai JAWABAN (bukan transaksi).
  * Perintah di dalam sesi: "batal", "kembali", "lewati". Sesi ditutup sopan bila 10 menit tidak dijawab.
- * Perubahan akses/uang hanya oleh kepala keluarga (Admin), selalu dikonfirmasi, dicatat server di sheet Log_Pengaturan.
+ * Perubahan akses/uang hanya oleh Admin (boleh ayah atau ibu), selalu dikonfirmasi, dicatat server di sheet Log_Pengaturan.
  */
 (function (g) {
   'use strict';
@@ -15,11 +15,27 @@
   const admin = () => !!S.saya && S.saya.peran === 'ADMIN';
   const namaAdmin = () => (S.anggotaAktif().find((a) => a.peran === 'ADMIN') || {}).nama || 'Admin';
   const sapa = () => (S.sapa ? S.sapa() : (S.saya && S.saya.nama) || '');
+  // 1.0.21: peran = hak akses (Admin / Dewasa / Anak). Admin bukan "kepala keluarga" — ayah atau ibu boleh jadi Admin.
+  // Sapaan (Pak / Bu / nama) disimpan terpisah di kolom hubungan.
   const PERAN = {
-    KEPALA: { label: 'Kepala keluarga', peran: 'ADMIN' }, SUAMI: { label: 'Suami', peran: 'DEWASA' }, ISTRI: { label: 'Istri', peran: 'DEWASA' },
-    ANAK: { label: 'Anak', peran: 'ANAK' }, LAINNYA: { label: 'Lainnya', peran: 'DEWASA' }
+    ADMIN: { label: 'Admin', peran: 'ADMIN' }, DEWASA: { label: 'Dewasa', peran: 'DEWASA' }, ANAK: { label: 'Anak', peran: 'ANAK' }
   };
-  const labelHub = (a) => (a.hubungan && PERAN[a.hubungan] ? PERAN[a.hubungan].label : a.peran === 'ADMIN' ? 'Kepala keluarga' : a.peran === 'ANAK' ? 'Anak' : 'Dewasa');
+  const SAPA = { SUAMI: 'Pak', ISTRI: 'Bu', LAINNYA: 'Nama saja' };
+  const labelHub = (a) => (a.peran === 'ADMIN' ? 'Admin' : a.peran === 'ANAK' ? 'Anak' : 'Dewasa');
+  /** Jawaban peran: "admin", "dewasa", "anak", atau "istri"/"ayah" (→ Dewasa + sapaannya) */
+  function aturPeran(t, d) {
+    const k = P().peranDari(t) || (pilih(t, Object.keys(PERAN).map((x) => ({ label: PERAN[x].label, nilai: x })).concat([{ label: 'Orang tua', nilai: 'DEWASA' },
+      { label: 'Istri', nilai: 'ISTRI' }, { label: 'Suami', nilai: 'SUAMI' }, { label: 'Ibu', nilai: 'ISTRI' }, { label: 'Ayah', nilai: 'SUAMI' }, { label: 'Lainnya', nilai: 'LAINNYA' }])) || {}).nilai;
+    if (!k) return false;
+    if (k === 'ADMIN' || k === 'KEPALA') d.peran = 'ADMIN';
+    else if (k === 'ANAK') { d.peran = 'ANAK'; d.hub = 'ANAK'; }
+    else if (k === 'SUAMI' || k === 'ISTRI' || k === 'LAINNYA') { d.peran = /\badmin\b/.test(P().normal(t)) ? 'ADMIN' : 'DEWASA'; d.hub = k; }
+    else d.peran = k;
+    return true;
+  }
+  const langkahSapa = { k: 'hub', perlu: (d) => d.peran !== 'ANAK' && !d.hub,
+    tanya: (d) => ({ teks: '**' + d.nama + '** dipanggil apa di chat?', chips: [{ label: 'Pak' }, { label: 'Bu' }, { label: 'Nama saja' }] }),
+    jawab: (t, d) => { const v = P().normal(t).trim(); const h = /^(pak|bapak|bpk|ayah|suami|papa)$/.test(v) ? 'SUAMI' : /^(bu|ibu|bunda|istri|mama|buk)$/.test(v) ? 'ISTRI' : /^(nama|nama saja|nama aja|namanya saja)$/.test(v) ? 'LAINNYA' : ''; if (!h) return 'Pilih **Pak**, **Bu**, atau **Nama saja**.'; d.hub = h; } };
   const TIPE = { REKENING: 'Rekening', EWALLET: 'E-Wallet', TUNAI: 'Tunai', TABUNGAN: 'Tabungan' };
   const RE_BATAL = /^(batal|batalkan|stop|keluar|cancel|ga jadi|gak jadi|nggak jadi|tidak jadi|enggak jadi|udahan|sudahan|gajadi)$/;
   const RE_KEMBALI = /^(kembali|balik|back|sebelumnya|mundur|ulang yang tadi)$/;
@@ -75,8 +91,9 @@
     langkah: [
       { k: 'nama', tanya: () => ({ teks: 'Siapa nama anggota barunya?', sub: 'Contoh: **Rina**' }),
         jawab: (t, d) => { const v = String(t).replace(/[^A-Za-zÀ-ÿ' \-]/g, ' ').replace(/\s+/g, ' ').trim(); if (/\d/.test(t) || v.length < 2 || v.split(' ').length > 3) return 'Namanya cukup 1–3 kata huruf saja, ya. Contoh: **Rina**'; d.nama = v.toLowerCase().replace(/(^|\s)\S/g, (c) => c.toUpperCase()); } },
-      { k: 'peran', tanya: (d) => ({ teks: '**' + d.nama + '** perannya apa?', chips: Object.keys(PERAN).map((k) => ({ label: PERAN[k].label })) }),
-        jawab: (t, d) => { const v = P().peranDari(t) || (pilih(t, Object.keys(PERAN).map((k) => ({ label: PERAN[k].label, nilai: k }))) || {}).nilai; if (!v) return 'Pilih salah satu: kepala keluarga, suami, istri, anak, atau lainnya.'; d.peran = v; } },
+      { k: 'peran', tanya: (d) => ({ teks: '**' + d.nama + '** perannya apa di CashKu?', sub: '**Admin** bisa mengatur akun, anggaran, kategori, dan dompet (boleh ayah atau ibu). **Dewasa** mencatat & melihat semua. **Anak** hanya mencatat.', chips: Object.keys(PERAN).map((k) => ({ label: PERAN[k].label })) }),
+        jawab: (t, d) => { if (!aturPeran(t, d)) return 'Pilih salah satu: **Admin**, **Dewasa**, atau **Anak**.'; } },
+      langkahSapa,
       { k: 'izin', opsional: 'SENDIRI', perlu: (d) => d.peran === 'ANAK',
         tanya: (d) => ({ teks: '**' + d.nama + '** boleh melihat transaksi siapa?', chips: [{ label: 'Milik sendiri' }, { label: 'Semua keluarga' }] }),
         jawab: (t, d) => { const o = pilih(t, [{ label: 'Milik sendiri', nilai: 'SENDIRI', kata: ['sendiri', 'dirinya', 'miliknya'] }, { label: 'Semua keluarga', nilai: 'SEMUA', kata: ['semua', 'keluarga'] }]); if (!o) return 'Pilih **Milik sendiri** atau **Semua keluarga**.'; d.izin = o.nilai; } },
@@ -90,10 +107,10 @@
       { k: 'password', rahasia: true, tanya: (d) => ({ teks: 'Password awal untuk **' + d.nama + '**?', sub: 'Minimal 6 karakter. Nanti ' + d.nama + ' bisa menggantinya sendiri di Akun Saya.', chips: [{ label: 'Buatkan otomatis' }] }),
         jawab: (t, d) => { const v = String(t).trim(); if (/^buatkan( otomatis)?$/i.test(v) || /^(acak|otomatis|random)$/i.test(v)) { d.password = sandiAcak(); return; } if (v.length < 6) return 'Password minimal 6 karakter ya.'; if (/\s/.test(v)) return 'Password tidak boleh ada spasi.'; d.password = v; } }
     ],
-    ringkas: (d) => ({ teks: 'Cek dulu ya, akun baru:\n• Nama: **' + d.nama + '**\n• Peran: **' + PERAN[d.peran].label + '**' + (d.peran === 'ANAK' ? ' (lihat ' + (d.izin === 'SEMUA' ? 'semua transaksi' : 'milik sendiri') + ')' : '') +
+    ringkas: (d) => ({ teks: 'Cek dulu ya, akun baru:\n• Nama: **' + d.nama + '**\n• Peran: **' + PERAN[d.peran].label + '**' + (d.peran === 'ANAK' ? ' (lihat ' + (d.izin === 'SEMUA' ? 'semua transaksi' : 'milik sendiri') + ')' : '') + (d.hub && SAPA[d.hub] ? '\n• Dipanggil: **' + SAPA[d.hub] + '**' : '') +
       '\n• Username: **' + d.username + '**\n• Password awal: **' + d.password + '**', sub: 'Simpan password ini dan berikan ke ' + d.nama + '. Menyimpan akun butuh internet.', ya: 'Simpan' }),
     async simpan(d) {
-      const res = await panggil('penggunaSimpan', { id: '', nama_tampilan: d.nama, username: d.username, peran: PERAN[d.peran].peran, hubungan: d.peran,
+      const res = await panggil('penggunaSimpan', { id: '', nama_tampilan: d.nama, username: d.username, peran: PERAN[d.peran].peran, hubungan: d.hub || (d.peran === 'ANAK' ? 'ANAK' : ''),
         izin_lihat: d.peran === 'ANAK' ? d.izin || 'SENDIRI' : 'SEMUA', id_dompet_default: (S.dompetAktif()[0] || {}).id_dompet || '', password: d.password });
       if (res.offline) return { ulang: 'Sedang offline 📴 Akun baru butuh internet. Ketuk **Simpan** lagi saat sudah online.' };
       if (!res.success) return { ulang: 'Belum bisa disimpan: ' + res.message };
@@ -114,7 +131,7 @@
       { k: 'nama', perlu: (d) => d.ubah === 'nama', tanya: (d) => ({ teks: 'Nama baru untuk **' + LIHAT_AKUN(d).nama + '**?' }),
         jawab: (t, d) => { const v = String(t).trim().slice(0, 30); if (v.length < 2) return 'Namanya terlalu pendek.'; d.nama = v; } },
       { k: 'peran', perlu: (d) => d.ubah === 'peran', tanya: (d) => ({ teks: 'Peran baru **' + LIHAT_AKUN(d).nama + '**?', chips: Object.keys(PERAN).map((k) => ({ label: PERAN[k].label })) }),
-        jawab: (t, d) => { const v = P().peranDari(t) || (pilih(t, Object.keys(PERAN).map((k) => ({ label: PERAN[k].label, nilai: k }))) || {}).nilai; if (!v) return 'Pilih salah satu: kepala keluarga, suami, istri, anak, atau lainnya.'; d.peran = v; } }
+        jawab: (t, d) => { if (!aturPeran(t, d)) return 'Pilih salah satu: **Admin**, **Dewasa**, atau **Anak**.'; } }
     ],
     ringkas: (d) => { const a = LIHAT_AKUN(d); return d.ubah === 'nama'
       ? { teks: 'Ubah nama **' + a.nama + '** jadi **' + d.nama + '**?', ya: 'Simpan' }
@@ -123,7 +140,7 @@
       const a = LIHAT_AKUN(d);
       const p = d.ubah === 'peran' ? d.peran : '';
       const res = await panggil('penggunaSimpan', { id: a.id, username: a.username, nama_tampilan: d.ubah === 'nama' ? d.nama : a.nama, peran: p ? PERAN[p].peran : a.peran,
-        hubungan: p || a.hubungan || '', izin_lihat: p === 'ANAK' ? 'SENDIRI' : a.izin_lihat, id_dompet_default: a.id_dompet_default, aktif: a.aktif !== false });
+        hubungan: p === 'ANAK' ? 'ANAK' : d.hub || (a.hubungan === 'KEPALA' || a.hubungan === 'ANAK' ? '' : a.hubungan || ''), izin_lihat: p === 'ANAK' ? 'SENDIRI' : a.izin_lihat, id_dompet_default: a.id_dompet_default, aktif: a.aktif !== false });
       if (res.offline) return { ulang: 'Sedang offline 📴 Ketuk **Simpan** lagi saat sudah online.' };
       if (!res.success) return { selesai: true, teks: 'Belum bisa diubah: ' + res.message };
       return { teks: d.ubah === 'nama' ? 'Nama akun sudah diganti jadi **' + d.nama + '** ✅' : 'Peran **' + a.nama + '** sekarang **' + PERAN[p].label + '** ✅' };
@@ -271,13 +288,13 @@
     return Chat().sistem('Sesi **' + a.judul + '** tadi saya tutup dulu karena belum dijawab 🙂 Ketik **' + a.perintah + '** lagi kapan saja.');
   }
   function tolak() {
-    return Chat().tambah({ kind: 'pilihan', data: { teks: 'Maaf' + (sapa() ? ', ' + sapa() : '') + ' 🙏 Pengaturan akun, anggaran, kategori, dompet, dan target tabungan hanya bisa diubah oleh kepala keluarga (' + namaAdmin() + ').',
+    return Chat().tambah({ kind: 'pilihan', data: { teks: 'Maaf' + (sapa() ? ', ' + sapa() : '') + ' 🙏 Pengaturan akun, anggaran, kategori, dompet, dan target tabungan hanya bisa diubah oleh Admin (' + namaAdmin() + ').',
       sub: 'Kalau perlu perubahan, minta tolong ' + namaAdmin() + ' ya.' } });
   }
   Atur.menu = function () {
     const chips = ['Tambah akun', 'Ubah akun', 'Nonaktifkan akun', 'Atur anggaran', 'Tambah kategori', 'Ganti nama kategori', 'Tambah dompet', 'Target tabungan']
       .map((x) => ({ label: x, aksi: 'kirim', nilai: { teks: x.toLowerCase() } }));
-    return Chat().tambah({ kind: 'pilihan', data: { teks: 'Ini yang bisa diatur lewat chat ⚙️', sub: admin() ? 'Ketuk salah satu, atau ketik langsung, misalnya **anggaran jajan 500rb** atau **tambah akun Rina istri**.' : 'Perubahan ini hanya bisa dilakukan kepala keluarga (' + namaAdmin() + ').',
+    return Chat().tambah({ kind: 'pilihan', data: { teks: 'Ini yang bisa diatur lewat chat ⚙️', sub: admin() ? 'Ketuk salah satu, atau ketik langsung, misalnya **anggaran jajan 500rb** atau **tambah akun Rina istri**.' : 'Perubahan ini hanya bisa dilakukan Admin (' + namaAdmin() + ').',
       chips: admin() ? chips.concat([{ label: 'Buka halaman Pengaturan', aksi: 'buka', nilai: { halaman: 'atur' }, gaya: 'ghost' }]) : [{ label: 'Buka halaman Pengaturan', aksi: 'buka', nilai: { halaman: 'atur' } }] } });
   };
   /** Mulai sesi. data = isian dari pesan pertama ("tambah akun Rina istri"). */
@@ -294,6 +311,8 @@
       if (alur === 'aktifkan' && a.aktif !== false) return Chat().sistem('Akun **' + a.nama + '** masih aktif kok 🙂');
     }
     if (alur === 'ubahAkun') { if (!data.peran) delete data.peran; if (!data.nama) delete data.nama; }
+    // Peran dari kalimat ("tambah akun Rina istri", "jadikan Rina admin") → hak akses + sapaan
+    if ((alur === 'akun' || alur === 'ubahAkun') && data.peran && !PERAN[data.peran]) { const d2 = {}; if (aturPeran(data.peran === 'KEPALA' ? 'admin' : data.peran.toLowerCase(), d2)) { data.peran = d2.peran; if (d2.hub) data.hub = d2.hub; } else delete data.peran; }
     if (alur === 'ubahKategori' && !data.kat) delete data.kat;
     if (alur === 'ubahKategori' && !data.nama) delete data.nama;
     if (alur === 'akun' && data.nama && S.master.anggota.some((a) => n(a.nama) === n(data.nama))) data.namaSama = data.nama;

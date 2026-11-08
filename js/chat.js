@@ -151,7 +151,6 @@
     if (!Chat.el) return;
     const s = [['wallet', 'Saldo', 'saldo'], ['calendar', 'Bulan ini', 'ringkasan bulan ini'], ['chart-pie', 'Sisa anggaran', 'sisa anggaran'],
       ['download', 'Unduh laporan', 'unduh laporan bulan ini'], ['undo-2', 'Batal', 'batal'], ['lightbulb', 'Bantuan', 'bantuan']];
-    if (!S.fiturDompet()) s.shift();
     Chat.el.querySelector('[data-saran]').innerHTML = s.map((x) => '<button class="chip" data-t="' + x[2] + '">' + ic(x[0], 'ic-sm') + U.esc(x[1]) + '</button>').join('');
   };
   Chat.statusHeader = () => {
@@ -286,7 +285,7 @@
     pindahKat(katId) { return G.kata('pk', ['Oke, sudah aku pindah ke {k} 👍', 'Sip, masuk {k} ya 👌', 'Siap, aku ubah ke {k} ✅'], { k: G.kat(katId) }); },
     chipsSapa() {
       return [{ label: 'Ringkasan hari ini', aksi: 'kirim', nilai: { teks: 'hari ini' } }, { label: 'Sisa anggaran', aksi: 'kirim', nilai: { teks: 'sisa anggaran' } }]
-        .concat(S.fiturDompet() ? [{ label: 'Saldo', aksi: 'kirim', nilai: { teks: 'saldo' } }] : []).concat([{ label: 'Bantuan', aksi: 'kirim', nilai: { teks: 'bantuan' } }]);
+        .concat([{ label: 'Saldo', aksi: 'kirim', nilai: { teks: 'saldo' } }, { label: 'Bantuan', aksi: 'kirim', nilai: { teks: 'bantuan' } }]);
     }
   };
   Chat.G = G;
@@ -418,7 +417,14 @@
       case 'kirim': if (!c.tetap) await tandai(m, i); return Chat.kirim(v.teks);
       case 'isi': Chat.input.value = v.teks; Chat.autoTinggi(); Chat.input.focus(); return;
       case 'buka': if (!c.tetap) await tandai(m, i); return UI.Router.go(v.halaman, v.param);
-      case 'kategori': await tandai(m, i); return Chat.setelahPilihKategori(v.txId, v.katId, v.frasa);
+      case 'kategori': await tandai(m, i); if (Chat.pending && Chat.pending.type === 'kategoriPilih') Chat.pending = null; return Chat.setelahPilihKategori(v.txId, v.katId, v.frasa);
+      case 'kategoriKetik': {
+        await tandai(m, i);
+        const p = Chat.pending && Chat.pending.type === 'kategoriPilih' ? Chat.pending : null;
+        if (!p) return;
+        Chat.pending = null;
+        return Chat.pilihKategoriKetik(p, v.id);
+      }
       case 'kategoriGanda':
         await tandai(m, i);
         if (Chat.pending && Chat.pending.type === 'ganda') Chat.pending = null;
@@ -758,6 +764,21 @@
           if (i > -1) return p.jawab(i);
         }
       }
+      if (p.type === 'kategoriPilih' && !n && !/\d/.test(teks) && P.normal(teks).split(' ').length <= 3 && !p.m.data.selesai) {
+        const ids = Chat.kategoriDariJawaban(teks, p.jenis);
+        if (ids.length === 1) return Chat.pilihKategoriKetik(p, ids[0]);
+        Chat.pending = p;
+        if (ids.length > 1) {
+          return Chat.tambah({ kind: 'pilihan', data: { teks: 'Maksudnya yang mana?', chips: ids.slice(0, 5).map((id) => ({ label: S.kat(id).ikon + ' ' + S.kat(id).nama, aksi: 'kategoriKetik', nilai: { id } })) } })
+            .then((m2) => { Chat.pending = p; p.m2 = m2; return m2; });
+        }
+        // Bukan nama kategori: kalau ternyata perintah/pertanyaan lain ("saldo", "batal"), diproses biasa
+        const it0 = P.analisis(teks, S.ctxParser());
+        if (!it0 || ['tidak_dikenal', 'maksud', 'butuh_nominal'].indexOf(it0.type) > -1 || (it0.type === 'transaksi' && (it0.drafts || []).every((d) => d.tanpaNominal))) {
+          return Chat.sistem('Kategori “' + teks.trim() + '” belum ada 🤔 Ketuk salah satu tombol di atas, atau **Lainnya…** untuk melihat semua kategori.');
+        }
+        Chat.pending = null;
+      }
       if (p.type === 'jenisMasuk' && /\b(pemasukan|pendapatan|penghasilan|gaji|bonus|uang baru|rejeki|rezeki|income|dikasih|hadiah)\b/.test(P.normal(teks)) && P.normal(teks).split(' ').length <= 4) return p.jawabMasuk();
       if (p.type === 'dompetBayar' || p.type === 'saldoDompet' || p.type === 'dompetPindah' || p.type === 'jenisMasuk') {
         const semuaIds = P.dompetDari(teks, S.ctxParser());
@@ -781,6 +802,8 @@
       }
       Chat.antreKlar = [];
     }
+    const tb = Chat.tombolDariKetik(teks);
+    if (tb) return Chat.aksi(tb.m, tb.c, tb.i);
     const it = P.analisis(teks, S.ctxParser());
     return Chat.prosesIntent(it, teks);
   };
@@ -801,6 +824,7 @@
       case 'targetHapus': return g.Atur.targetHapus(it.kata);
       case 'saldoUlang': return g.Kelola.saldoMulai(it, teks);
       case 'anggaranStatus': return g.Kelola.anggaranStatus(it);
+      case 'resetInfo': return g.Kelola.resetInfo();
       case 'namaSet': return Chat.namaSet(it);
       case 'namaTanya': return Chat.namaTanya();
       case 'ingatanSimpan': return Chat.ingatanSimpan(it);
@@ -864,7 +888,9 @@
     tanyaD.forEach((d) => { const kk = (d.dompetPilihan || []).join(',') || '*'; (grup[kk] = grup[kk] || []).push(d); });
     Object.keys(grup).forEach((kk) => klar.push({ type: 'dompetBayar', ds: grup[kk], pilihan: kk === '*' ? null : kk.split(',') }));
     if (jelas.length) await Chat.simpanDrafts(jelas, teksAsli, batch);
-    if (pindahOff) await Chat.sistem('Fitur dompet sedang dinonaktifkan Admin, jadi pindah saldo tidak dicatat.');
+    if (pindahOff) await Chat.sistem(S.master.dompet.some((d) => d.aktif !== false && d.tipe === 'TABUNGAN')
+      ? 'Dompet sedang digabung jadi satu, jadi pindah antar dompet tidak perlu dicatat. Yang tetap dicatat: **nabung** dan **ambil tabungan**.'
+      : 'Dompet sedang digabung jadi satu, jadi pindah saldo tidak perlu dicatat.');
     Chat.antreKlar = klar.map((k) => Object.assign(k, { batch, teksAsli }));
     return Chat.lanjutKlar();
   };
@@ -932,7 +958,7 @@
     } });
   };
 
-  Chat.tanyaKategori = function (t, frasa) {
+  Chat.tanyaKategori = async function (t, frasa) {
     const sering = {};
     S.tx.forEach((x) => { if (x.jenis === t.jenis && x.status === 'AKTIF') sering[x.id_kategori] = (sering[x.id_kategori] || 0) + 1; });
     const def = S.kategoriDefault(t.jenis);
@@ -941,12 +967,57 @@
     if (umum && t.jenis === 'KELUAR' && !sering['KAT-BULANAN']) sering['KAT-BULANAN'] = 0.5;
     let pilihan = S.kategoriAktif(t.jenis).filter((k) => k.id_kategori !== def).sort((a, b) => (sering[b.id_kategori] || 0) - (sering[a.id_kategori] || 0) || (a.urutan - b.urutan)).slice(0, 3);
     if (umum) frasa = '';
-    return Chat.tambah({ kind: 'pilihan', data: {
+    const m = await Chat.tambah({ kind: 'pilihan', data: {
       teks: umum ? '**' + t.keterangan + ' ' + U.rp(t.nominal) + '** masuk kategori apa nih?' : G.kata('kb', ['Hmm, “{f}” belum aku kenal nih 🤔 Masuk kategori apa?', 'Eh, “{f}” belum aku kenal 😅 Masuk kategori apa ya?'], { f: frasa }),
       sub: umum ? (t.jenis === 'KELUAR' ? 'Lain kali sebut barangnya ya, misalnya **belanja mainan 100rb**, biar langsung masuk kategori yang pas.' : '') : 'Cukup sekali, berikutnya aku langsung tahu 😉',
       chips: pilihan.map((k) => ({ label: k.ikon + ' ' + k.nama, aksi: 'kategori', nilai: { txId: t.id_transaksi, katId: k.id_kategori, frasa } }))
         .concat([{ label: 'Lainnya…', aksi: 'kategoriLain', nilai: { txId: t.id_transaksi, frasa }, gaya: 'ghost' }])
     } });
+    // 1.0.21: jawaban boleh diketik ("makan", "jajanan", "transport"), tidak harus menekan tombol
+    Chat.pending = { type: 'kategoriPilih', m, txId: t.id_transaksi, frasa, jenis: t.jenis };
+    return m;
+  };
+
+  /** Teks jawaban → kategori: nama kategori (boleh sebagian/salah ketik) atau kata kunci yang sudah dikenal */
+  Chat.kategoriDariJawaban = function (teks, jenis) {
+    const t = P.normal(teks).replace(/[^a-z0-9& ]/g, ' ').replace(/\b(masuk|masukkan|masukin|kategori|kategorinya|ke|ya|aja|saja|dong|deh|itu|yang|kayaknya|mungkin|sih|nya)\b/g, ' ').replace(/\s+/g, ' ').trim();
+    if (!t) return [];
+    const akt = S.kategoriAktif(jenis);
+    const nm = (k) => P.normal(k.nama).replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+    let ids = akt.filter((k) => nm(k) === t).map((k) => k.id_kategori);
+    if (!ids.length) ids = akt.filter((k) => nm(k).split(' ').some((w) => w.length >= 3 && (w === t || (t.length >= 4 && w.indexOf(t) === 0)))).map((k) => k.id_kategori);
+    if (!ids.length) ids = P.cariKategoriNama(t, S.ctxParser()).filter((id) => akt.some((k) => k.id_kategori === id));
+    if (!ids.length) {
+      // kata yang sudah dikenal: "jajanan" → Jajan, "bensin" → Transportasi
+      const r = P.analisis(t + ' 1000', S.ctxParser());
+      const d = r && r.drafts && r.drafts[0];
+      if (d && d.kategoriDikenal && akt.some((k) => k.id_kategori === d.id_kategori)) ids = [d.id_kategori];
+    }
+    if (!ids.length && t.length >= 4) ids = akt.filter((k) => nm(k).split(' ').some((w) => w.length >= 4 && P.lev(w, t) <= 1)).map((k) => k.id_kategori);
+    return Array.from(new Set(ids));
+  };
+  Chat.pilihKategoriKetik = function (p, katId) {
+    const m = p.m;
+    let i = m.data.chips.findIndex((c) => c.aksi === 'kategori' && c.nilai && c.nilai.katId === katId);
+    if (i < 0) {
+      m.data.chips.splice(m.data.chips.length - 1, 0, { label: S.kat(katId).ikon + ' ' + S.kat(katId).nama, aksi: 'kategori', nilai: { txId: p.txId, katId, frasa: p.frasa } });
+      i = m.data.chips.length - 2;
+    }
+    return Chat.aksi(m, m.data.chips[i], i);
+  };
+
+  /** 1.0.21: jawaban yang diketik sama dengan salah satu tombol di pesan terakhir → dianggap menekan tombol itu */
+  const labelPolos = (s) => P.normal(String(s || '')).replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+  Chat.tombolDariKetik = function (teks) {
+    const t = labelPolos(teks);
+    if (!t || t.split(' ').length > 4 || P.nominalSaja(teks)) return null;
+    const m = S.chat[S.chat.length - 2];          // pesan sebelum pesan yang baru diketik
+    if (!m || m.from === 'me' || m.data.selesai || !Array.isArray(m.data.chips) || !m.data.chips.length) return null;
+    const ok = m.data.chips.map((c, i) => ({ c, i, l: labelPolos(c.label) })).filter((x) => x.l && ['kirim', 'buka', 'isi'].indexOf(x.c.aksi) < 0);
+    let hit = ok.filter((x) => x.l === t);
+    if (!hit.length && t.length >= 3) hit = ok.filter((x) => x.l.split(' ')[0] === t || x.l.indexOf(t + ' ') === 0);
+    if (!hit.length && t.length >= 5) hit = ok.filter((x) => P.lev(x.l, t) <= 1);
+    return hit.length === 1 ? { m, c: hit[0].c, i: hit[0].i } : null;
   };
 
   Chat.setelahPilihKategori = async function (txId, katId, frasa, o) {
@@ -1083,7 +1154,7 @@
       return Chat.tambah({ kind: 'pilihan', data: { teks: 'Saya panggil **' + (S.hormat(calon) === null ? calon.panggilan : S.sapa(calon)) + '**, ya?',
         chips: [{ label: 'Ya', aksi: 'sapaYa', nilai: { it }, gaya: 'acc' }, { label: 'Bukan', aksi: 'tutup' }] } });
     }
-    // Peran belum jelas (akun lama / kepala keluarga) → tanya sekali
+    // Sapaan belum jelas (akun lama / Admin) → tanya sekali
     if (S.hormat(calon) === null) {
       await Chat.tambah({ kind: 'pilihan', data: { teks: 'Saya panggil Bapak atau Ibu?', chips: [{ label: 'Bapak', aksi: 'sapaPilih', nilai: { it, sapaan: 'Pak' } }, { label: 'Ibu', aksi: 'sapaPilih', nilai: { it, sapaan: 'Bu' } }, { label: 'Nama saja', aksi: 'sapaPilih', nilai: { it, sapaan: 'NAMA' } }] } });
       Chat.pending = { type: 'sapaPilih', it };
@@ -1097,8 +1168,7 @@
   };
   Chat.namaTanya = function () {
     if (!S.saya) return;
-    const HUB = { KEPALA: 'kepala keluarga', SUAMI: 'suami', ISTRI: 'istri', ANAK: 'anak', LAINNYA: 'anggota keluarga' };
-    const peran = HUB[String(S.saya.hubungan || '').toUpperCase()] || (S.saya.peran === 'ADMIN' ? 'kepala keluarga' : S.saya.peran === 'ANAK' ? 'anak' : 'anggota keluarga');
+    const peran = S.saya.peran === 'ADMIN' ? 'Admin' : S.saya.peran === 'ANAK' ? 'anak' : 'anggota keluarga';
     const akun = 'akun **@' + (S.saya.username || S.saya.nama) + '**, ' + peran;
     if (!S.saya.panggilan) return Chat.tambah({ kind: 'pilihan', data: { teks: 'Ini ' + akun + ' 🙂 Tapi aku belum tahu nama panggilanmu.', sub: 'Ketik misalnya **nama saya Dani**.' } });
     return Chat.tambah({ kind: 'pilihan', data: { teks: G.kata('siapaSy', ['Tentu tahu dong 😊 Ini **{nama}**.', 'Ingat dong, ini **{nama}** 😊', 'Ini **{nama}**, kan? 😄']) + '\n(' + akun + ')',
@@ -1496,8 +1566,17 @@
 
   // ---------- Penyesuaian saldo ("saldo bank sekarang 5jt") ----------
   Chat.setSaldo = async function (items, teksAsli) {
-    if (!S.fiturDompet()) return Chat.sistem('Fitur dompet sedang dinonaktifkan Admin, jadi saldo per dompet tidak dicatat.');
     const batch = batchBaru();
+    if (!S.fiturDompet()) {
+      // Dompet digabung: "saldo sekarang 2jt" = saldo Uang; "saldo tabungan 5jt" = Tabungan
+      for (const it of items) {
+        const tab = (it.id_dompet && S.dompet(it.id_dompet) && S.dompet(it.id_dompet).tipe === 'TABUNGAN') ? it.id_dompet
+          : (it.pilihan || []).filter((id) => S.dompet(id) && S.dompet(id).tipe === 'TABUNGAN').length === (it.pilihan || []).length && (it.pilihan || []).length ? it.pilihan[0] : '';
+        if (tab) await Chat.terapkanSaldo(tab, it.nominal, teksAsli, batch);
+        else await Chat.terapkanSaldoUang(it.nominal, teksAsli, batch);
+      }
+      return;
+    }
     const um = Chat.cari(Chat._ref);
     if (um && um.from === 'me') { um.data.batch = batch; g.DB.put('chat', um); }
     const klar = [];
@@ -1507,6 +1586,16 @@
     }
     Chat.antreKlar = klar;
     return Chat.lanjutKlar();
+  };
+  /** Dompet digabung: saldo "Uang" disesuaikan lewat dompet utama */
+  Chat.terapkanSaldoUang = async function (target, teksAsli, batch) {
+    const ut = S.dompetUtama();
+    if (!ut) return Chat.sistem('Belum ada dompet aktif untuk mencatat saldo.');
+    const cur = (S.saldoRingkas().find((x) => x.id === 'UANG') || { saldo: 0 }).saldo;
+    const selisih = target - cur;
+    if (!selisih) return Chat.sistem('Saldo uang memang sudah ' + U.rp(target) + ', jadi nggak ada yang aku ubah 👌');
+    const t = await S.simpanTx({ jenis: 'SALDO', nominal: selisih, keterangan: 'Saldo jadi ' + U.rp(target), id_dompet: ut.id_dompet, tanggal_transaksi: U.hariIni(), teks_asli: teksAsli, id_batch: batch, sumber: 'CHAT' });
+    return Chat.tambah({ kind: 'tx', data: { ids: [t.id_transaksi], saldo: { dari: cur, ke: target, dompet: 'Uang' }, salam: 'Oke, saldo uang sudah aku sesuaikan 👍' } });
   };
   Chat.terapkanSaldo = async function (id, target, teksAsli, batch) {
     const d = S.dompet(id);
@@ -1708,8 +1797,19 @@
     let kor = catatanKoreksi(it);
     if ((it.metric === 'rincian' || it.metric === 'kemana' || it.metric === 'sering') && g.Rincian) return g.Rincian.jawab(it, kor);
 
+    if (it.metric === 'saldo' && !S.fiturDompet()) {
+      // Dompet digabung: Uang (Tunai + Rekening + E-wallet) & Tabungan
+      let s = S.saldoRingkas();
+      const dk = it.dompet ? S.dompet(it.dompet) : null;
+      if (dk) s = s.filter((x) => (dk.tipe === 'TABUNGAN' ? x.id === dk.id_dompet : x.id === 'UANG'));
+      const total = s.reduce((a, x) => a + x.saldo, 0);
+      const sat = s.length === 1;
+      return Chat.tambah({ kind: 'ringkasan', data: { judul: sat ? (s[0].ikon + ' Saldo ' + s[0].nama.toLowerCase()) : '💰 Saldo', total: (total < 0 ? '−' : '') + U.rp(total), kelasTotal: total < 0 ? 't-out' : '',
+        caption: sat ? (s[0].id === 'UANG' ? 'Tunai, rekening & e-wallet digabung' : 'uang yang disisihkan') + ' · per ' + U.tglPanjang(U.hariIni()) : undefined,
+        baris: sat ? undefined : s.map((x) => ({ l: x.ikon + ' ' + x.nama + (x.id === 'UANG' ? ' (tunai, rekening & e-wallet)' : ''), v: (x.saldo < 0 ? '−' : '') + U.rp(x.saldo), kelas: x.saldo < 0 ? 't-out' : '' })),
+        catatan: (g.Sync.status !== 'ok' ? 'Data per ' + U.relatif(S.meta.lastSync) + '. ' : '') + kor } });
+    }
     if (it.metric === 'saldo') {
-      if (!S.fiturDompet()) return Chat.sistem('Fitur dompet sedang dinonaktifkan Admin, jadi saldo per dompet tidak dihitung.');
       let s = S.saldoDompet();
       if (it.dompet) s = s.filter((x) => x.dompet.id_dompet === it.dompet);
       if (!s.length) return Chat.sistem('Belum ada dompet yang bisa kamu lihat saldonya.');

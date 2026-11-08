@@ -43,6 +43,7 @@
         const hi = e.target.closest('[data-ing-hapus]');
         if (hi) { const ok = await UI.Sheet.konfirmasi({ judul: 'Hapus data ini dari ingatan?', isi: hi.dataset.judul, ok: 'Hapus', bahaya: true }); if (ok) { await S.ubahMaster('ingatan.del', { id_ingatan: hi.dataset.ingHapus }); render(el); } return; }
         if (e.target.closest('[data-keluar]')) { g.App.keluar(); return; }
+        if (e.target.closest('[data-reset-cashku]')) { g.Kelola.resetCashku(); return; }
         if (e.target.closest('[data-sinkron]')) { await g.Sync.sekarang({ paksaMaster: true }); render(el); UI.Toast.show(g.Sync.status === 'ok' ? 'Tersinkron' : 'Belum tersinkron', g.Sync.status === 'ok' ? 'success' : 'warn', g.Sync.pesanError || ''); }
       });
       el.addEventListener('change', async (e) => {
@@ -159,6 +160,7 @@
       row('data-sinkron', st === 'offline' ? 'cloud-off' : 'refresh-cw', 'Sinkron sekarang', '<span class="small muted">' + (antre ? antre + ' belum terkirim' : U.relatif(S.meta.lastSync)) + '</span>', false) +
       (g.App.bisaPasang() ? row('data-pasang', 'smartphone', 'Pasang CashKu di HP', '') : '') +
       '<button class="list-row" data-keluar style="color:var(--expense)"><span class="ico-c sm" style="background:var(--danger-bg);color:var(--expense)">' + ic('log-out', 'ic-sm') + '</span><span class="grow" style="font-weight:600">Keluar</span></button></div>' +
+      (S.isAdmin() ? '<div class="sec">Zona berbahaya</div><div class="list-group"><button class="list-row" data-reset-cashku style="color:var(--expense)"><span class="ico-c sm" style="background:var(--danger-bg);color:var(--expense)">' + ic('trash-2', 'ic-sm') + '</span><span class="grow"><b style="font-weight:600;display:block">Reset CashKu</b><span class="small muted">Hapus semua riwayat, saldo, pengingat & anggaran</span></span></button></div>' : '') +
       '<p class="small muted" style="text-align:center;margin-top:20px;display:flex;justify-content:center;gap:6px;align-items:center">' + ic('cloud', 'ic-sm') + 'CashKu v' + U.esc(U.VERSI) + ' · Data tersimpan di Google Sheets keluarga</p>';
     el.querySelector('[data-body]').innerHTML = h;
   }
@@ -553,7 +555,7 @@
       '<label class="field"><span class="lbl">Nama tampilan</span><input class="input" data-nama maxlength="30" value="' + U.esc(st.nama) + '" placeholder="Contoh: Adik"></label>' +
       '<label class="field"><span class="lbl">Username <span class="hint">Digunakan untuk login</span></span><div class="input-wrap"><span class="pre" style="font-size:16px">@</span><input class="input" data-user maxlength="20" autocapitalize="off" autocomplete="off" value="' + U.esc(st.username || '') + '"></div><div data-uerr></div></label>' +
       (id ? '' : '<label class="field"><span class="lbl">Password awal</span><div class="input-wrap"><input class="input has-end" style="padding-left:14px" type="password" data-pw autocomplete="new-password"><button class="end" type="button" data-eye aria-label="Tampilkan password">' + ic('eye') + '</button></div><p class="help">Anggota dapat menggantinya nanti di profil</p></label>') +
-      '<span class="lbl" style="margin-top:16px">Peran dalam keluarga</span><div class="seg fill" data-peran><button data-v="ADMIN">Admin</button><button data-v="DEWASA">Dewasa</button><button data-v="ANAK">' + ic('smile', 'ic-sm') + 'Anak</button></div>' +
+      '<span class="lbl" style="margin-top:16px">Peran di CashKu <span class="hint">Admin boleh ayah atau ibu</span></span><div class="seg fill" data-peran><button data-v="ADMIN">Admin</button><button data-v="DEWASA">Dewasa</button><button data-v="ANAK">' + ic('smile', 'ic-sm') + 'Anak</button></div>' +
       '<span class="lbl" style="margin-top:16px">Dipanggil <span class="hint">Untuk sapaan di chat</span></span><div class="seg fill" data-hub><button data-v="SUAMI">Pak</button><button data-v="ISTRI">Bu</button><button data-v="ANAK">Nama saja</button><button data-v="">Tanya</button></div>' +
       '<div class="card" style="margin-top:16px;background:var(--info-bg);border:0" data-izinbox><div class="row" style="margin-bottom:12px">' + ic('lock-open') + '<b style="font-weight:500">Izin akses transaksi</b></div>' +
       '<label class="radio-card"><input type="radio" name="izin" value="SEMUA"' + (st.izin_lihat === 'SEMUA' ? ' checked' : '') + '><span><b>Semua transaksi keluarga</b><span class="small muted">Dapat melihat catatan belanja orang tua</span></span></label>' +

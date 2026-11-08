@@ -635,7 +635,8 @@
     const satuanQty = (k) => /\d\s*$/.test(tanpaNominal.slice(0, k.index)) && RE_SATUAN_QTY.test(k.frasa);
     const katSemua = katMentah.some((k) => !satuanQty(k)) ? katMentah.filter((k) => !satuanQty(k)) : katMentah;
     const katTerpanjang = katSemua.slice().sort((a, b) => b.len - a.len)[0];
-    let dompetHits = ctx.fiturDompet ? cariSemua(tanpaNominal, idx.dompet) : [];
+    // Fitur dompet nonaktif: hanya Tabungan yang dikenali (Tunai/Rekening/E-wallet digabung jadi satu)
+    let dompetHits = ctx.fiturDompet ? cariSemua(tanpaNominal, idx.dompet) : cariSemua(tanpaNominal, idx.dompet).filter((h) => idx.dompetById[h.id] && idx.dompetById[h.id].tipe === 'TABUNGAN');
     // "pindah dana", "transfer dana", "dana masuk": di sini "dana" = uang, bukan e-wallet DANA
     const danaUmum = (hh) => hh.frasa === 'dana' && /\b(pindah|pindahin|pindahkan|transfer|tf|kirim|uang|sumber)\s+$/.test(tanpaNominal.slice(0, hh.index)) ||
       hh.frasa === 'dana' && /^\s+(masuk|keluar|darurat|cair)\b/.test(tanpaNominal.slice(hh.index + hh.len));
@@ -666,7 +667,19 @@
     if (pilih && pilih.opsi) d.nominalOpsi = pilih.opsi;
 
     if (jenis === 'PINDAH') {
-      if (!ctx.fiturDompet) { d.pindahNonaktif = true; return d; }
+      if (!ctx.fiturDompet) {
+        // Dompet digabung: yang tetap dicatat hanya nabung (Uang → Tabungan) & ambil tabungan (Tabungan → Uang)
+        const tabs = ctx.dompet.filter((x) => x.aktif !== false && x.tipe === 'TABUNGAN').map((x) => x.id_dompet);
+        const f0 = pindahM.frasa;
+        const keTab = /nabung|celeng/.test(f0) || dompetHits.some((hh) => /\b(ke|kedalam|masuk|di|dalam)$/.test(kataSebelum(tanpaNominal, hh.index)));
+        const dariTab = !keTab && /tarik|ambil|bongkar|pakai|pake/.test(f0) && (/tabungan|celengan/.test(f0) || dompetHits.length > 0);
+        if (!tabs.length || !ctx.dompetUtama || (!keTab && !dariTab)) { d.pindahNonaktif = true; return d; }
+        const tab = dompetHits[0] ? dompetHits[0].id : tabs[0];
+        d.id_dompet = keTab ? ctx.dompetUtama : tab; d.id_dompet_tujuan = keTab ? tab : ctx.dompetUtama;
+        const k0 = bersihkanKet(hapusRentang(tanpaNominal, dompetHits.map((hh) => [hh.index, hh.index + hh.len])), jenis);
+        d.keterangan = U_huruf1(k0 && !/^(nabung|menabung|tarik|ambil|bongkar|simpan|masukin|ke|dari)$/.test(k0) ? k0 : keTab ? 'Nabung' : 'Ambil tabungan');
+        return d;
+      }
       const dk = (id) => idx.dompetById[id];
       const tipe = (tp) => ctx.dompet.filter((x) => x.aktif !== false && x.tipe === tp).map((x) => x.id_dompet);
       let tujuan = null, sumber = null;
@@ -759,9 +772,9 @@
       }
       // "masuk rekening 2jt": bisa pemasukan, bisa pindahan dari tunai → ditanyakan
       if (jenis === 'MASUK' && (!kat || kat.target === ctx.kategoriDefaultMasuk) && masukM && MASUK_UMUM.test(masukM.frasa) && d.dompetDisebut && d.id_dompet) d.tanyaJenis = true;
-    } else d.id_dompet = '';
+    } else d.id_dompet = (dompetHits[0] && dompetHits[0].id) || ctx.dompetUtama || '';
 
-    const rangesDompet = dompetHits.map((hh) => {
+    const rangesDompet = (ctx.fiturDompet ? dompetHits : cariSemua(tanpaNominal, idx.dompet)).map((hh) => {
       const prep = kataSebelum(tanpaNominal, hh.index);
       const pakaiPrep = /\b(pakai|pake|via|lewat|dari|ke|di|dengan|pakai saldo)$/.test(prep);
       return [hh.index - (pakaiPrep ? prep.length + 1 : 0), hh.index + hh.len];
@@ -1331,7 +1344,7 @@
   // ----------------------------------------------------------------
   // Pengaturan lewat chat: akun, anggaran, kategori, dompet, target tabungan
   // ----------------------------------------------------------------
-  const PERAN_KATA = [['KEPALA', /\b(kepala(?:\s+keluarga)?|kk|admin)\b/], ['SUAMI', /\b(suami|ayah|bapak|papa|papi|abi|abah)\b/], ['ISTRI', /\b(istri|ibu|bunda|mama|mami|umi|bini)\b/],
+  const PERAN_KATA = [['ADMIN', /\b(admin|pengelola|kepala(?:\s+keluarga)?|kk)\b/], ['DEWASA', /\b(dewasa|orang tua|ortu)\b/], ['SUAMI', /\b(suami|ayah|bapak|papa|papi|abi|abah)\b/], ['ISTRI', /\b(istri|ibu|bunda|mama|mami|umi|bini)\b/],
     ['ANAK', /\b(anak|putra|putri|anakku)\b/], ['LAINNYA', /\b(lainnya|lain|nenek|kakek|om|tante|saudara|keponakan|asisten|art|pembantu|mertua)\b/]];
   function peranDari(t) { t = normal(t); const x = PERAN_KATA.find((p) => p[1].test(t)); return x ? x[0] : ''; }
   const TIPE_DOMPET = [['REKENING', /\b(rekening|rek|bank|atm|debit|bri|bca|bni|mandiri|bsi|btn|jago|seabank|blu|cimb|permata|danamon)\b/], ['EWALLET', /\b(e-?wallet|dompet digital|gopay|ovo|dana|shopeepay|spay|linkaja)\b/],
@@ -1381,7 +1394,7 @@
       return { type: 'atur', alur: 'akun', data };
     }
     const cariOrang = (s) => { const n = normal(s).trim(); const a = (ctx.anggota || []).filter((x) => normal(x.nama) === n || normal(x.username || '') === n || normal(x.nama).split(' ')[0] === n); return a.length === 1 ? a[0].id : ''; };
-    if ((m = /^(?:tolong\s+)?(?:ubah|ganti|jadikan|set|atur)\s+peran(?:\s+(?:akun|anggota))?\s+(.+?)\s+(?:jadi|menjadi|ke|sebagai)\s+(.+)$/.exec(t)) || (m = /^(?:tolong\s+)?jadikan\s+(.+?)\s+(?:sebagai\s+)?(kepala keluarga|suami|istri|anak|lainnya|admin)$/.exec(t))) {
+    if ((m = /^(?:tolong\s+)?(?:ubah|ganti|jadikan|set|atur)\s+peran(?:\s+(?:akun|anggota))?\s+(.+?)\s+(?:jadi|menjadi|ke|sebagai)\s+(.+)$/.exec(t)) || (m = /^(?:tolong\s+)?jadikan\s+(.+?)\s+(?:sebagai\s+)?(kepala keluarga|suami|istri|anak|lainnya|admin|dewasa)$/.exec(t))) {
       return { type: 'atur', alur: 'ubahAkun', data: { orang: cariOrang(m[1]), orangTeks: m[1], ubah: 'peran', peran: peranDari(m[2]) } };
     }
     if ((m = /^(?:tolong\s+)?(?:ubah|ganti)\s+nama\s+(?:akun|anggota|pengguna)\s+(.+?)\s+(?:jadi|menjadi)\s+(.+)$/.exec(t))) {
@@ -1826,6 +1839,9 @@
   function kelolaDari(t0, ctx, idx) {
     let m;
     const t = t0.replace(/[?!.]+$/, '').trim();
+    // ---- Reset seluruh aplikasi → diarahkan ke Pengaturan (wajib password) ----
+    if (/^(?:tolong\s+|mau\s+|saya\s+mau\s+|cara\s+|gimana\s+(?:cara\s+)?|bagaimana\s+(?:cara\s+)?)?(?:reset|riset|atur\s*ulang|kosongkan|hapus|bersihkan|ulang)\s+(?:semua\s+)?(?:cashku|aplikasi|aplikasinya|semua data|semuanya|seluruh data|data(?:nya)?(?:\s+semua)?)\b/.test(t) ||
+      /^(?:mulai\s+(?:dari\s+)?(?:nol|awal|0)\s+lagi|cashku\s+(?:di\s*)?reset)$/.test(t)) return { type: 'resetInfo' };
     // ---- Atur ulang saldo ----
     if (!/\b(berapa|brp|cek|lihat)\b/.test(t) && ((m = RE_SALDO_ULANG_1.exec(t)) || (m = RE_SALDO_ULANG_2.exec(t)) || (m = RE_SALDO_NOL.exec(t)))) {
       const sisa = (m[1] || '') + ' ' + (m[2] || '');
@@ -1959,6 +1975,11 @@
       const dq0 = cariDompetQ(t, idx);
       if (!/\bsaldo\b/.test(t) && dq0 && !katHit && !/\b(pengeluaran|pemasukan|keluar|masuk|transaksi|riwayat|bayar|beli|belanja)\b/.test(t)) {
         q.metric = 'saldo'; if (dq0.id) q.dompet = dq0.id; else q.dompetAmbigu = dq0.ambigu; return q;
+      }
+      // "sisa uang?", "uangku tinggal berapa", "uang saya berapa" → saldo (bukan anggaran)
+      if (/\b(uang|uangku|uangnya|uang saya|duit|duitku|duitnya|duit saya)\b/.test(t) && /\b(sisa|tinggal|tersisa|berapa|brp|ada|sekarang|skrg|masih)\b/.test(t) &&
+        (!katHit || /^(uang|duit|uangku|duitku)$/.test(katHit.frasa)) && !/\b(pengeluaran|pemasukan|keluar|masuk|habis|jajan|saku|makan|bulanan)\b/.test(t)) {
+        q.metric = 'saldo'; delete q.orang; return q;
       }
       if (/\bsaldo\b/.test(t)) {
         q.metric = 'saldo';

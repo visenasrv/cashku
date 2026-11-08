@@ -13,14 +13,20 @@
   // =============================================================
   // ATUR ULANG SALDO
   // =============================================================
+  // Dompet nonaktif (1.0.21): Tunai/Rekening/E-wallet digabung jadi "Uang" (id UANG); Tabungan tetap sendiri
   function saldoSekarang() {
     const out = {};
-    S().saldoDompet().forEach((x) => { out[x.dompet.id_dompet] = x.saldo; });
+    S().saldoRingkas().forEach((x) => { out[x.id] = x.saldo; });
     return out;
+  }
+  function semuaDompet() {
+    if (S().fiturDompet()) return S().dompetAktif();
+    return S().saldoRingkas().map((x) => (x.id === 'UANG' ? { id_dompet: 'UANG', nama: 'Uang', ikon: '💰', tipe: 'UANG' } : x.dompet));
   }
   /** Dompet yang dituju: dipilih, atau semua dompet aktif */
   function daftarDompet(ids) {
-    const aktif = S().dompetAktif();
+    const aktif = semuaDompet();
+    if (!S().fiturDompet() && ids && ids.length) ids = ids.map((id) => (id === 'UANG' || !S().dompet(id) || S().dompet(id).tipe !== 'TABUNGAN' ? 'UANG' : id));
     return ids && ids.length ? aktif.filter((d) => ids.indexOf(d.id_dompet) > -1) : aktif;
   }
 
@@ -51,7 +57,8 @@
     for (const d of dompet) {
       const selisih = target - (saldo[d.id_dompet] || 0);
       if (!selisih) continue;
-      const t = await S().simpanTx({ jenis: 'SALDO', nominal: selisih, keterangan: 'Atur ulang saldo jadi ' + rp(target), id_dompet: d.id_dompet,
+      const idDompet = d.id_dompet === 'UANG' ? (S().dompetUtama() || {}).id_dompet || '' : d.id_dompet;
+      const t = await S().simpanTx({ jenis: 'SALDO', nominal: selisih, keterangan: 'Atur ulang saldo jadi ' + rp(target), id_dompet: idDompet,
         tanggal_transaksi: U().hariIni(), teks_asli: teksAsli || '', id_batch: batch, sumber: teksAsli ? 'CHAT' : 'APP' });
       ids.push(t.id_transaksi);
     }
@@ -62,7 +69,6 @@
   function tolakSaldo() {
     const s = S();
     if (!s.isAdmin()) return 'Maaf, atur ulang saldo hanya bisa dilakukan oleh **Admin**.';
-    if (!s.fiturDompet()) return 'Fitur dompet sedang dinonaktifkan, jadi tidak ada saldo yang bisa diatur ulang.';
     if (!s.dompetAktif().length) return 'Belum ada dompet aktif.';
     return '';
   }
@@ -77,7 +83,7 @@
     const berubah = dompet.filter((d) => (saldo[d.id_dompet] || 0) !== target);
     if (!berubah.length) return C.sistem('Saldo ' + (dompet.length > 1 ? 'semua dompet itu' : '**' + dompet[0].nama + '**') + ' memang sudah ' + rp(target) + ', jadi tidak ada yang diubah.');
     return C.tambah({ kind: 'ringkasan', data: {
-      judul: '⚠️ Atur ulang saldo ' + (dompet.length === S().dompetAktif().length && dompet.length > 1 ? 'semua dompet' : dompet.map((d) => d.nama).join(', ')),
+      judul: '⚠️ Atur ulang saldo ' + (dompet.length === semuaDompet().length && dompet.length > 1 ? 'semua dompet' : dompet.map((d) => d.nama).join(', ')),
       baris: dompet.map((d) => ({ l: (d.ikon || '💳') + ' ' + d.nama, v: tanda(saldo[d.id_dompet] || 0) + ' → ' + rp(target), kelas: 't-out' })),
       catatan: '**Peringatan:** saldo lama tidak dipakai lagi dan dihitung ulang mulai dari ' + rp(target) + ' per hari ini. Riwayat transaksi & laporan tetap ada. Setelah ini akan diminta mengetik **' + KATA_KONFIRMASI + '**.',
       chips: [{ label: 'Lanjutkan', aksi: 'saldoUlang', nilai: { ids: dompet.map((d) => d.id_dompet), target, teks: teks || '' }, gaya: 'danger', ikon: 'triangle-alert', tetap: true },
@@ -101,7 +107,7 @@
   K.saldoDariPengaturan = function () {
     const tolak = tolakSaldo();
     if (tolak) return UI().Toast.show('Tidak bisa', 'warn', tolak.replace(/\*\*/g, ''));
-    const saldo = saldoSekarang(), semua = S().dompetAktif();
+    const saldo = saldoSekarang(), semua = semuaDompet();
     const pilih = new Set(semua.map((d) => d.id_dompet));
     const s = UI().Sheet.open({
       title: 'Atur ulang saldo', sub: 'Pilih dompet yang saldonya diatur ulang',
@@ -201,6 +207,62 @@
       return K.anggaranUbah(xs, false);
     }
     return null;
+  };
+
+  // =============================================================
+  // RESET CASHKU (1.0.20) — khusus Admin, wajib password Admin
+  // =============================================================
+  K.resetCashku = function () {
+    const u = U(), ui = UI();
+    if (!S().isAdmin()) return ui.Toast.show('Hanya Admin', 'warn', 'Reset CashKu hanya bisa dilakukan oleh Admin.');
+    let cadangan = null;
+    const s = ui.Sheet.open({
+      title: '⚠️ Reset CashKu',
+      html: '<div class="banner red" style="display:block;margin-bottom:12px"><b>Semua data berikut akan DIHAPUS dan tidak bisa dikembalikan:</b>' +
+        '<ul style="margin:6px 0 0;padding-left:20px;line-height:22px"><li>Semua riwayat transaksi</li><li>Saldo semua dompet (jadi Rp0)</li><li>Semua pengingat</li><li>Semua anggaran</li>' +
+        '<li>Catatan yang diingat (nomor PLN, rekening, dll.)</li><li>Target tabungan & data Penasihat Keuangan</li><li>Riwayat chat di semua HP keluarga</li></ul></div>' +
+        '<p class="small muted" style="margin:0 0 14px">Yang tetap ada: akun anggota keluarga, kategori, kata yang sudah dipelajari, nama dompet, dan pengaturan.</p>' +
+        '<span class="lbl">Buat cadangan Google Sheet dulu?</span><div class="seg" data-cad style="margin-top:6px"><button type="button" data-v="ya">Ya, buat cadangan</button><button type="button" data-v="tidak">Tidak perlu</button></div>' +
+        '<p class="small muted" style="margin:6px 0 0" data-cad-ket>Cadangan disimpan di folder CashKu di Google Drive.</p>' +
+        '<label class="field" style="margin-top:14px"><span class="lbl">Password Admin</span><div class="input-wrap">' + g.ic('lock') + '<input class="input has-end" type="password" data-pw autocomplete="current-password"><button type="button" class="end" data-eye aria-label="Tampilkan password">' + g.ic('eye') + '</button></div><div data-err></div></label>' +
+        '<div class="sheet-foot"><button class="btn block lg danger" data-reset disabled>Reset CashKu</button><button class="btn block ghost" data-no>Batal</button></div>'
+    });
+    const el = s.el, pw = el.querySelector('[data-pw]'), btn = el.querySelector('[data-reset]'), err = el.querySelector('[data-err]');
+    const cekSiap = () => { btn.disabled = !(cadangan !== null && pw.value.length > 0); };
+    el.querySelector('[data-cad]').onclick = (e) => {
+      const b = e.target.closest('button[data-v]'); if (!b) return;
+      cadangan = b.dataset.v === 'ya';
+      u.$$('[data-cad] button', el).forEach((x) => x.classList.toggle('on', x === b));
+      el.querySelector('[data-cad-ket]').textContent = cadangan ? 'Cadangan disimpan di folder CashKu di Google Drive (butuh beberapa detik).' : 'Tanpa cadangan, data lama tidak bisa dikembalikan sama sekali.';
+      cekSiap();
+    };
+    pw.addEventListener('input', () => { err.innerHTML = ''; pw.classList.remove('err'); cekSiap(); });
+    el.querySelector('[data-eye]').onclick = () => { pw.type = pw.type === 'password' ? 'text' : 'password'; el.querySelector('[data-eye]').innerHTML = g.ic(pw.type === 'password' ? 'eye' : 'eye-off'); };
+    el.querySelector('[data-no]').onclick = () => s.close();
+    btn.onclick = async () => {
+      if (btn.disabled) return;
+      if (navigator.onLine === false) { err.innerHTML = '<div class="err-msg">' + g.ic('circle-alert', 'ic-sm') + 'Reset perlu koneksi internet.</div>'; return; }
+      ui.tombolSibuk(btn, true, cadangan ? 'Membuat cadangan…' : 'Mereset…');
+      const res = await g.API.api('resetCashku', { password: pw.value, cadangan: !!cadangan }, { tries: 1 });
+      if (!res.success) {
+        ui.tombolSibuk(btn, false);
+        if (res.data && res.data.code === 'PASSWORD') pw.classList.add('err');
+        err.innerHTML = '<div class="err-msg">' + g.ic('circle-alert', 'ic-sm') + u.esc(res.message || 'Reset gagal. Coba lagi.') + '</div>';
+        return;
+      }
+      s.close();
+      if (g.Sync) await g.Sync.terapkanReset(true);
+      ui.Toast.show('CashKu sudah direset', 'success', res.data.cadangan ? 'Cadangan tersimpan di folder CashKu di Google Drive.' : '');
+      if (res.data.cadangan && g.Chat) await g.Chat.sistem('💾 Cadangan data lama tersimpan di folder **CashKu** di Google Drive (nama berkas diawali *Cadangan CashKu*).', true);
+      ui.Router.go('chat');
+    };
+  };
+  /** Dari chat: "reset cashku" → arahkan ke Pengaturan */
+  K.resetInfo = function () {
+    const C = Chat();
+    if (!S().isAdmin()) return C.sistem('Reset CashKu hanya bisa dilakukan oleh **Admin**.');
+    return C.tambah({ kind: 'pilihan', data: { teks: 'Reset CashKu menghapus semua riwayat, saldo, pengingat, anggaran, catatan, dan target. Demi keamanan, reset hanya bisa lewat **Pengaturan** dengan password Admin.',
+      chips: [{ label: 'Buka Pengaturan', aksi: 'buka', nilai: { halaman: 'pengaturan' }, ikon: 'settings', tetap: true }] } });
   };
 
   g.Kelola = K;

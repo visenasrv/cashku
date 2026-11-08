@@ -70,6 +70,16 @@
         t.oncomplete = () => res(); t.onerror = () => rej(t.error);
       });
     },
+    /** Kosongkan beberapa tempat penyimpanan saja (sesi tetap) */
+    async kosongkan(stores) {
+      const db = await buka();
+      if (!db) { stores.forEach((x) => { mem[x] = new Map(); }); return; }
+      return new Promise((res) => {
+        const t = db.transaction(stores, 'readwrite');
+        stores.forEach((x) => t.objectStore(x).clear());
+        t.oncomplete = () => res(); t.onerror = () => res();
+      });
+    },
     async clearAll() {
       const db = await buka();
       if (!db) { mem = {}; return; }
