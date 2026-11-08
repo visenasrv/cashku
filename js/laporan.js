@@ -242,7 +242,7 @@
     const { jsPDF } = g.jspdf;
     const doc = new jsPDF({ unit: 'mm', format: 'a4', compress: true });
     const W = 210, M = 14;
-    const tema = U.temaDari(S.master.pengaturan.warna_utama || '#25D366');
+    const tema = U.temaDari(UI.Tema.warna());
     const P = U.hexRgb(tema.primary), A = U.hexRgb(tema.accent);
     const HIJAU = [22, 163, 74], MERAH = [220, 38, 38], BIRU = [37, 99, 235], ABU = [102, 119, 129], GELAP = [17, 27, 33];
     const r = ringkas(list, c);

@@ -5,6 +5,8 @@
   let promptPasang = null;
   const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   const terpasang = () => (g.matchMedia && g.matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true;
+  // Sudah berupa aplikasi (APK Android atau PWA yang dibuka dari ikon) → tombol "Pasang CashKu di HP" tidak ditampilkan
+  const sudahAplikasi = () => terpasang() || !!(g.Capacitor && g.Capacitor.isNativePlatform && g.Capacitor.isNativePlatform());
 
   // =============================================================
   // LOGIN
@@ -19,13 +21,13 @@
         '<label class="field"><span class="lbl">Password</span><div class="input-wrap">' + ic('lock') + '<input class="input has-end" name="password" type="password" autocomplete="current-password" required><button type="button" class="end" data-eye aria-label="Tampilkan password">' + ic('eye') + '</button></div><div data-err></div></label>' +
         '<button class="btn block lg" style="margin-top:24px" data-masuk>Masuk</button>' +
         '<p class="muted small" style="text-align:center;margin:16px 0 0">Lupa password? <span class="link">Hubungi Admin keluarga</span></p>' +
-        '<div class="hr" style="margin:24px 0"></div><button type="button" class="btn block soft" data-pasang>' + ic('download') + 'Pasang CashKu di HP</button>' +
+        (sudahAplikasi() ? '' : '<div class="hr" style="margin:24px 0"></div><button type="button" class="btn block soft" data-pasang>' + ic('download') + 'Pasang CashKu di HP</button>') +
         '<div class="ver">CashKu v' + U.esc(U.VERSI) + '</div></form></div>';
     },
     init(el) {
       const f = el.querySelector('[data-form]');
       el.querySelector('[data-eye]').onclick = () => { const p = f.password; p.type = p.type === 'password' ? 'text' : 'password'; el.querySelector('[data-eye]').innerHTML = ic(p.type === 'password' ? 'eye' : 'eye-off'); };
-      el.querySelector('[data-pasang]').onclick = () => App.pasang();
+      const bp = el.querySelector('[data-pasang]'); if (bp) bp.onclick = () => App.pasang();
       f.addEventListener('submit', async (e) => {
         e.preventDefault();
         const err = el.querySelector('[data-err]'); err.innerHTML = '';
@@ -50,7 +52,8 @@
       f.password.addEventListener('input', () => f.password.classList.remove('err'));
     },
     show(el) {
-      el.querySelector('[data-pasang]').hidden = terpasang();
+      const bp = el.querySelector('[data-pasang]');
+      if (bp) { bp.hidden = sudahAplikasi(); if (bp.previousElementSibling) bp.previousElementSibling.hidden = sudahAplikasi(); }
       el.querySelector('[data-cfg]').innerHTML = g.API.urlTerisi() ? '' : '<div class="banner amber" style="margin-bottom:16px">' + ic('triangle-alert') + '<span class="small">Alamat server belum diisi. Buka berkas <b>js/config.js</b> dan tempel URL Web App (/exec) dari Apps Script.</span></div>';
     }
   });
@@ -136,9 +139,10 @@
       location.reload();
     },
 
-    bisaPasang() { return !terpasang() && (!!promptPasang || isIOS); },
+    bisaPasang() { return !sudahAplikasi() && (!!promptPasang || isIOS); },
+    sudahAplikasi,
     async pasang() {
-      if (terpasang()) return UI.Toast.show('CashKu sudah terpasang', 'info');
+      if (sudahAplikasi()) return UI.Toast.show('CashKu sudah terpasang', 'info');
       if (promptPasang) {
         promptPasang.prompt();
         const r = await promptPasang.userChoice.catch(() => null);
@@ -186,7 +190,7 @@
     }
   };
   addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); promptPasang = e; });
-  addEventListener('appinstalled', () => { promptPasang = null; });
+  addEventListener('appinstalled', () => { promptPasang = null; document.querySelectorAll('.login [data-pasang]').forEach((b) => { if (b.previousElementSibling && b.previousElementSibling.classList.contains('hr')) b.previousElementSibling.remove(); b.remove(); }); });
 
   g.App = App;
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', App.boot); else App.boot();

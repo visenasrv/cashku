@@ -48,7 +48,8 @@
     'bantuan', 'tanggal', 'sampai', 'semua', 'saja', 'transaksi', 'rata', 'rerata', 'terbesar', 'terkecil', 'tertinggi', 'terendah',
     'termahal', 'termurah', 'paling', 'besar', 'kecil', 'banyak', 'boros', 'hemat', 'harian', 'mingguan', 'bulanan', 'tahunan', 'setiap',
     'tiap', 'pekan', 'sehari', 'seminggu', 'sebulan', 'setahun', 'kategori', 'siapa', 'belakangan', 'average', 'satu', 'dua', 'tiga',
-    'empat', 'lima', 'enam', 'tujuh', 'delapan', 'sembilan', 'sepuluh', 'sebelas', 'belas', 'puluh'].concat(BULAN);
+    'empat', 'lima', 'enam', 'tujuh', 'delapan', 'sembilan', 'sepuluh', 'sebelas', 'belas', 'puluh',
+    'rincian', 'perincian', 'rinci', 'detail', 'sering', 'tersering', 'kemana', 'uangku', 'duitku', 'pengeluaranku'].concat(BULAN);
   const VOCAB_SET = new Set(VOCAB);
   const STOP = ['beli', 'membeli', 'dibeli', 'bayar', 'bayarin', 'membayar', 'dibayar', 'buat', 'untuk', 'tadi', 'sebesar', 'seharga',
     'harga', 'rp', 'sih', 'ya', 'dong', 'nih', 'aja', 'saja', 'yang', 'barusan', 'td'];
@@ -1715,6 +1716,64 @@
     return r;
   }
 
+  // =============================================================
+  // 1.0.17 — Rincian & "uang habis ke mana"
+  // =============================================================
+  const RE_RINCI = /\b(rincian(?:nya)?|rinci(?:kan|annya)?|perincian(?:nya)?|merinci|detail(?:nya)?|detil(?:nya)?|breakdown)\b/;
+  const RE_APA_SAJA = /\b(?:apa|mana)\s*(?:saja|aja|aj|sj|sja)\b|\bapa(?:\s*-\s*|\s+)apa\b|\bapa2\b/;
+  const RE_UANG = /\b(uang|uangku|uangnya|uang\s*mu|duit|duitku|duitnya|gaji|gajiku|gajinya|pengeluaran|pengeluaranku|belanjaan|belanjaanku|dana|keuangan|keuanganku)\b/;
+  const RE_KEMANA = /\b(ke\s?mana|kmn|kmana|kemana|larinya|lari|perginya)\b/;
+  const RE_BUAT_APA = /\b(buat|untuk|utk|bwt|dipakai|dipake|kepakai|kepake|terpakai|habis|abis|keluar)\s+(?:apa|ap)\b/;
+  const RE_SERING = /\b(paling\s+sering|tersering|sering(?:nya)?\s+(?:beli|bayar|belanja|jajan|keluar|keluarin|habis|dibeli|dibayar)|yang\s+sering(?:\s+(?:dibeli|dibayar|keluar))?)\b/;
+  const RE_DARI_MANA = /\bdari\s?(?:mana|mn)\b/;
+  const RE_MASUK_Q = /\b(pemasukan|pemasukanku|pendapatan|pendapatanku|penghasilan|penghasilanku|uang\s+masuk|duit\s+masuk)\b/;
+  const RE_DIRI = /\b(uangku|duitku|gajiku|pengeluaranku|belanjaanku|jajanku|pemasukanku|pendapatanku|penghasilanku|keuanganku)\b/;
+  const RINCI_SISA = /\b(rincian|rinciannya|rinci|rincikan|perincian|perinciannya|merinci|detail|detailnya|detil|detilnya|breakdown|lihat|liat|lihatin|tampilkan|tunjukkan|tunjukin|kasih|tolong|dong|ya|yah|deh|sih|nih|apa|ap|saja|aja|aj|sj|sja|mana|pengeluaran|pengeluaranku|pemasukan|pemasukanku|untuk|buat|utk|bwt|semua|minggu|pekan|bulan|tahun|hari|ini|lalu|kemarin|terakhir|tanggal|sampai|hingga|saya|aku|ku|kami|kita|keluarga|transaksi|catatan|yang|di|ke|dari|kategori|nya|mau|ingin|pengen|coba|bisa|data|jumlah|total|berapa|kali|sering|paling|tersering|beli|bayar|belanja|kapan|dalam|selama|per)\b/g;
+
+  function rincianDari(t, ctx, idx, per, adaPeriode, nominalKuat) {
+    if (nominalKuat) return null;
+    const masukQ = RE_MASUK_Q.test(t) || (RE_DARI_MANA.test(t) && /\b(uang|duit|rezeki|rejeki|gaji)\b/.test(t) && !/\b(ke\s?mana|kemana|keluar|habis|abis)\b/.test(t));
+    let mode = '';
+    if (RE_SERING.test(t)) mode = 'sering';
+    else if (!masukQ && ((RE_KEMANA.test(t) && (RE_UANG.test(t) || /\b(habis|abis)\b/.test(t))) ||
+      (RE_BUAT_APA.test(t) && (RE_UANG.test(t) || /\b(habis|abis)\b/.test(t))) ||
+      /\bboros\b.*\b(di\s?mana|dimana|ke\s?mana|kemana|apa|nya)\b/.test(t) ||
+      /\b(kok|kenapa|knp|mengapa|napa|kenapa ya)\b.*\b(cepat|cepet|cpt|cpet|gampang|mudah)\s+(habis|abis|menipis|tipis)\b/.test(t) ||
+      /\b(analisa|analisis|analisi|cek|periksa)\b.*\b(pengeluaran|pengeluaranku|keuangan|keuanganku|uang|uangku|belanja)\b/.test(t))) mode = 'kemana';
+    else if (RE_RINCI.test(t) || (masukQ && RE_DARI_MANA.test(t))) mode = 'rincian';
+    else if (RE_APA_SAJA.test(t) && (RE_UANG.test(t) || masukQ || /\b(beli|belanja|bayar|jajan)\b/.test(t) ||
+      cariSemua(t, idx.kat).some((k) => !kataUmum(k.frasa)))) mode = 'rincian';
+    if (!mode) return null;
+    // "detail transaksi hari ini" tanpa sasaran → tetap daftar transaksi (masuk & keluar)
+    if (mode === 'rincian' && !masukQ && /\b(transaksi|catatan|riwayat)\b/.test(t) && !/\b(pengeluaran|belanja|beli|bayar|jajan)\b/.test(t) &&
+      !cariSemua(t, idx.kat).some((k) => !kataUmum(k.frasa))) return null;
+
+    const q = { type: 'tanya', metric: mode, jenis: masukQ ? 'MASUK' : 'KELUAR' };
+    if (per.ok) q.periode = per; else if (adaPeriode) q.periodeError = per;
+    const ang = cariAnggota(t, idx, ctx);
+    if (ang) q.orang = ang.id; else if (RE_DIRI.test(t)) q.orang = ctx.saya.id;
+    if (mode === 'kemana') return q;
+
+    // Sasaran rincian: kategori ("jajan"), kata yang lebih spesifik ("bensin", "kopi"), atau semua pengeluaran/pemasukan
+    let sisa = t.replace(/[?!.,]/g, ' ');
+    idx.anggota.forEach((e) => { if (e.frasa && new RegExp('\\b' + e.frasa.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b').test(sisa)) sisa = sisa.replace(e.frasa, ' '); });
+    const katHit = cariSemua(sisa, idx.kat).filter((k) => !kataUmum(k.frasa) && !/^(belanja|pengeluaran|pemasukan|uang masuk|uang|duit)$/.test(k.frasa)).sort((a, b) => b.len - a.len)[0];
+    if (katHit && (!masukQ || katHit.jenis === 'MASUK')) {
+      q.kategori = katHit.target; q.jenis = katHit.jenis;
+      const nk = normal((idx.katAktif[katHit.target] || {}).nama || '');
+      if (nk.split(/[^a-z0-9]+/).indexOf(katHit.frasa) < 0 && nk !== katHit.frasa) q.kata = katHit.frasa;
+      return q;
+    }
+    const kata = sisa.replace(RINCI_SISA, ' ').replace(new RegExp('\\b' + NAMA_BULAN_RE + '\\b', 'g'), ' ').replace(/\b\d+\b/g, ' ')
+      .replace(/\b(uang|uangku|uangnya|duit|duitku|gaji|gajiku|masuk|keluar|pendapatan|penghasilan|habis|abis|dong|nya)\b/g, ' ').replace(/\s+/g, ' ').trim();
+    if (kata && /^[a-z][a-z ]{2,30}$/.test(kata) && kata.split(' ').length <= 3) {
+      const ids = cariKategoriNama(kata, ctx);
+      if (ids.length === 1 && idx.katAktif[ids[0]]) { q.kategori = ids[0]; q.jenis = idx.katAktif[ids[0]].jenis; return q; }
+      q.kata = kata;                                   // dicari di keterangan transaksi ("rincian kopi susu")
+    }
+    return q;
+  }
+
   function inti(t0, ctx, idx, at) {
     let m;
     const nomAwal = cariNominal(tutupBukanNominal(t0));
@@ -1745,6 +1804,10 @@
       return r;
     }
     if (/^(laporan|rekap laporan|lihat laporan)$/.test(t)) return { type: 'laporan_ambigu' };
+
+    // ---- 1.0.17: rincian per kategori/kata, "uangku habis ke mana", "paling sering beli apa" ----
+    const rq = rincianDari(t, ctx, idx, per, adaPeriode, nominalKuat);
+    if (rq) { rq.perubahan = kor.perubahan; rq.teksKoreksi = t; return rq; }
 
     // ---- Maksud pesan: dinilai dari beberapa petunjuk sekaligus (bobot di sheet Aturan_Parser) ----
     const fk = frasaKategoriQ(t), fh = frasaHargaQ(t);

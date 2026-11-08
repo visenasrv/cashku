@@ -1,5 +1,5 @@
 {
- "versi": "1.0.16",
+ "versi": "1.0.17",
  "berkas": [
   "css/style.css",
   "fonts/pjs-400.woff2",
@@ -28,6 +28,7 @@
   "js/penasihat-hitung.js",
   "js/penasihat.js",
   "js/pengingat.js",
+  "js/rincian.js",
   "js/state.js",
   "js/suara.js",
   "js/sync.js",

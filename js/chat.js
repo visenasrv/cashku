@@ -345,7 +345,7 @@
     },
     bantuan(m) {
       const contoh = [['Catat pengeluaran', 'beli kopi 25rb'], ['Beberapa sekaligus', 'bensin 25rb, makan siang 30rb'], ['Pemasukan', 'gaji masuk bri 5jt'],
-        ['Pindah saldo', 'top up gopay 100rb dari bri'], ['Nabung (tunai → rekening)', 'nabung 500rb'], ['Atur saldo dompet', 'saldo bank sekarang 5jt'], ['Tanya', 'jajan bulan ini?'], ['Terbesar', 'pengeluaran terbesar minggu ini'], ['Rata-rata', 'rata-rata pengeluaran per hari'], ['Unduh laporan', 'unduh laporan bulan ini'], ['Batalkan', 'batal']];
+        ['Pindah saldo', 'top up gopay 100rb dari bri'], ['Nabung (tunai → rekening)', 'nabung 500rb'], ['Atur saldo dompet', 'saldo bank sekarang 5jt'], ['Tanya', 'jajan bulan ini?'], ['Rincian', 'rincian jajan'], ['Uang ke mana', 'uangku habis ke mana saja'], ['Terbesar', 'pengeluaran terbesar minggu ini'], ['Rata-rata', 'rata-rata pengeluaran per hari'], ['Unduh laporan', 'unduh laporan bulan ini'], ['Batalkan', 'batal']];
       return {
         html: '<p>' + teksAman(m.data.teks || 'Cukup ketik seperti mengobrol. Contoh:') + '</p>' +
           contoh.map((c) => '<div class="ln" style="display:flex;justify-content:space-between;gap:8px;padding:4px 0"><span class="muted small">' + c[0] + '</span><button class="link small" data-isi="' + U.esc(c[1]) + '">' + U.esc(c[1]) + '</button></div>').join('') +
@@ -528,6 +528,8 @@
       case 'pakaiVersi': await tandai(m, i); return g.Asli && g.Asli.pakaiSekarang(v);
       case 'pnSesi': await tandai(m, i); return g.Penasihat.chip(v);
       case 'pn': return g.Penasihat.aksi(m, i, v, tandai);
+      case 'rcLagi': return g.Rincian.jawab(v.it, '');
+      case 'rcBulan': return g.Rincian.bulanLain(v);
       case 'targetHapusYa': await tandai(m, i); return g.Atur.targetHapusYa(v.id);
       case 'sapaYa': await tandai(m, i); return Chat.namaSet(Object.assign({}, v.it, { ragu: false }));
       case 'sapaPilih': {
@@ -1682,6 +1684,7 @@
     const f = { mulai: per.mulai, sampai: per.sampai, orang };
     const namaOrang = orang ? (orang === S.saya.id ? ' (saya)' : ' · ' + S.orang(orang).nama) : '';
     let kor = catatanKoreksi(it);
+    if ((it.metric === 'rincian' || it.metric === 'kemana' || it.metric === 'sering') && g.Rincian) return g.Rincian.jawab(it, kor);
 
     if (it.metric === 'saldo') {
       if (!S.fiturDompet()) return Chat.sistem('Fitur dompet sedang dinonaktifkan Admin, jadi saldo per dompet tidak dihitung.');

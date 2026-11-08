@@ -156,11 +156,18 @@
   const Tema = {
     mode() { try { return localStorage.getItem('cashku:tema') || 'OTOMATIS'; } catch (e) { return 'OTOMATIS'; } },
     setMode(m) { try { localStorage.setItem('cashku:tema', m); } catch (e) {} Tema.terapkan(); },
+    // 1.0.17: warna utama hanya tersimpan di HP ini (tidak dikirim ke server, tidak mengubah HP anggota lain)
+    warnaHp() { try { return localStorage.getItem('cashku:warna_hp') || ''; } catch (e) { return ''; } },
+    setWarna(w) { try { if (w) localStorage.setItem('cashku:warna_hp', w); else localStorage.removeItem('cashku:warna_hp'); } catch (e) {} Tema.terapkan(); },
+    warna() {
+      return Tema.warnaHp() || (g.S && g.S.master && g.S.master.pengaturan && g.S.master.pengaturan.warna_utama) ||
+        (function () { try { return localStorage.getItem('cashku:warna'); } catch (e) { return null; } })() || '#25D366';
+    },
     gelap() { const m = Tema.mode(); return m === 'GELAP' || (m === 'OTOMATIS' && g.matchMedia && g.matchMedia('(prefers-color-scheme: dark)').matches); },
     terapkan() {
       const root = document.documentElement;
       root.dataset.theme = Tema.gelap() ? 'dark' : 'light';
-      const warna = (g.S && g.S._warnaSementara) || (g.S && g.S.master && g.S.master.pengaturan && g.S.master.pengaturan.warna_utama) || (function () { try { return localStorage.getItem('cashku:warna'); } catch (e) { return null; } })() || '#25D366';
+      const warna = Tema.warna();
       try { localStorage.setItem('cashku:warna', warna); } catch (e) {}
       const t = U.temaDari(warna);
       root.style.setProperty('--accent', t.accent);

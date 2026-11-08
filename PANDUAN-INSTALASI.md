@@ -176,6 +176,21 @@ Claude akan memandu tahap ini satu per satu di percakapan.
 
 ## Memperbarui aplikasi
 
+> **Pembaruan 1.0.17 (rincian lewat chat, warna per HP, tombol pasang)**: **hanya tampilan** yang berubah.
+> - Server (`Kode.gs`) **tidak perlu** diganti dan tidak perlu deploy ulang.
+> - Cukup ekstrak ZIP ke folder repo lalu push. APK di HP ikut terbarui sendiri (tidak perlu APK baru).
+>
+> **Tanya rincian:**
+> - *rincian jajan*, *detail bensin bulan lalu*, *jajan apa aja minggu ini*, *rincian pemasukan*: total, per item, semua transaksi, yang paling besar & paling sering, dan perbandingan dengan bulan lalu.
+> - *uangku habis ke mana saja*, *kok uang cepat habis*: pengeluaran minggu ini & bulan ini per kategori, pengeluaran terbesar, dan yang paling sering.
+> - *paling sering beli apa*: urutan barang yang paling sering dibeli.
+>
+> Bulan lain hanya ditawarkan bila bulan itu ada catatannya.
+>
+> **Warna utama:** sekarang hanya tersimpan di HP masing-masing. Setiap anggota boleh memilih warnanya sendiri (juga tanpa internet), dan HP lain tidak ikut berubah. **Pakai bawaan** mengembalikan warna awal.
+>
+> **Tombol "Pasang CashKu di HP"** tidak tampil lagi di aplikasi Android dan di CashKu yang sudah dipasang di layar utama.
+>
 > **Pembaruan 1.0.16 (input suara + aplikasi Android/APK + semua isi 1.0.14 & 1.0.15)** — cukup sekali pasang:
 > 1. Apps Script → ganti seluruh isi `Kode.gs` → **Simpan** → jalankan **`migrasiData`** sekali → **Deploy → Manage deployments → Edit → New version → Deploy**.
 > 2. Ikuti **PANDUAN-APK.md bagian 2**: isi 3 secret kunci APK di GitHub (sekali saja, sebelum push).

@@ -29,7 +29,8 @@
       el.addEventListener('click', async (e) => {
         const go = e.target.closest('[data-go]'); if (go) { UI.Router.go(go.dataset.go); return; }
         const sw = e.target.closest('[data-warna]');
-        if (sw && S.isAdmin()) { simpanWarna(sw.dataset.warna, el); return; }
+        if (sw) { simpanWarna(sw.dataset.warna, el); return; }
+        if (e.target.closest('[data-warna-bawaan]')) { simpanWarna('', el); return; }
         if (e.target.closest('[data-latar-hapus]')) { await g.Chat.Latar.hapus(); render(el); UI.Toast.show('Latar chat dikembalikan', 'success'); return; }
         const m = e.target.closest('[data-tema] button[data-v]');
         if (m) { UI.Tema.setMode(m.dataset.v); render(el); return; }
@@ -64,30 +65,16 @@
     show(el) { render(el); },
     segarkan(el) { render(el); }
   });
-  // Ganti warna: langsung diterapkan di layar (instan), disimpan ke server di latar; dikembalikan bila gagal
-  let urutWarna = 0, statusWarna = '';
-  async function simpanWarna(w, el) {
-    if (!S.isAdmin() || !UI.perluOnline()) return;
-    const id = ++urutWarna;
-    if (!S._warnaSementara) S._warnaLama = String(S.master.pengaturan.warna_utama || '#25D366');
-    S._warnaSementara = w;
-    statusWarna = 'simpan';
-    UI.Tema.terapkan(); render(el);
-    const res = await g.API.api('pengaturanSimpan', { warna_utama: w });
-    if (id !== urutWarna) return;                     // sudah ada pilihan warna yang lebih baru
-    if (res.success) {
-      S.master.pengaturan.warna_utama = w; await S.simpanMaster();
-      statusWarna = 'ok'; g.Sync.jadwal(1500);
-    } else {
-      S.master.pengaturan.warna_utama = S._warnaLama; statusWarna = 'gagal';
-      UI.Toast.show('Warna belum tersimpan', 'error', res.message || 'Coba lagi saat koneksi stabil.');
-    }
-    S._warnaSementara = null;
-    UI.Tema.terapkan(); render(el);
-    setTimeout(() => { if (id === urutWarna && statusWarna === 'ok') { statusWarna = ''; if (!el.hidden) render(el); } }, 2500);
+  // Ganti warna (1.0.17): hanya untuk HP ini — disimpan di HP, tidak dikirim ke server, bisa dipakai tanpa internet
+  let statusWarna = '', tWarna = 0;
+  function simpanWarna(w, el) {
+    UI.Tema.setWarna(w);
+    statusWarna = 'ok'; render(el);
+    clearTimeout(tWarna);
+    tWarna = setTimeout(() => { statusWarna = ''; if (!el.hidden) render(el); }, 2500);
   }
   function render(el) {
-    const s = S.saya, warna = String(S._warnaSementara || S.master.pengaturan.warna_utama || '#25D366').toUpperCase();
+    const s = S.saya, warna = String(UI.Tema.warna()).toUpperCase();
     const L = g.Chat && g.Chat.Latar;
     const usulan = S.master.usulan.filter((u) => u.status === 'MENUNGGU').length;
     const st = g.Sync.status, antre = Array.from(S.outbox.values()).filter((o) => o.type === 'tx.put').length;
@@ -97,13 +84,12 @@
       '<button class="link small" data-go="akun">Ubah profil' + ic('chevron-right', 'ic-sm') + '</button></div>';
 
     h += '<div class="sec">Tampilan</div><div class="card"><div class="row" style="margin-bottom:12px"><span class="ico-c sm">' + ic('palette', 'ic-sm') + '</span><b style="font-weight:500">Warna utama aplikasi</b></div>' +
-      '<div class="swatches">' + SWATCH.map((w) => '<button class="swatch ' + (w === warna ? 'on' : '') + '" data-warna="' + w + '" style="background:' + w + '" aria-label="Warna ' + w + '"' + (S.isAdmin() ? '' : ' disabled') + '>' + (w === warna ? ic('check', 'ic-sm') : '') + '</button>').join('') +
+      '<div class="swatches">' + SWATCH.map((w) => '<button class="swatch ' + (w === warna ? 'on' : '') + '" data-warna="' + w + '" style="background:' + w + '" aria-label="Warna ' + w + '">' + (w === warna ? ic('check', 'ic-sm') : '') + '</button>').join('') +
       (SWATCH.indexOf(warna) < 0 ? '<span class="swatch on" style="background:' + U.esc(warna) + '">' + ic('check', 'ic-sm') + '</span>' : '') +
-      (S.isAdmin() ? '<label class="swatch add" aria-label="Warna lain">' + ic('plus', 'ic-sm') + '<input type="color" data-custom value="' + U.esc(warna.toLowerCase()) + '"></label>' : '') + '</div>' +
-      (statusWarna === 'simpan' ? '<p class="small" style="margin:10px 0 0;display:flex;gap:8px;align-items:center;color:var(--primary)"><span class="spin-sm"></span>Menyimpan warna\u2026 (sudah terlihat di HP ini)</p>'
-        : statusWarna === 'ok' ? '<p class="small t-in" style="margin:10px 0 0;display:flex;gap:6px;align-items:center">' + ic('check', 'ic-sm') + 'Warna tersimpan. Anggota lain mendapat warna baru saat sinkron.</p>'
-        : statusWarna === 'gagal' ? '<p class="small t-out" style="margin:10px 0 0;display:flex;gap:6px;align-items:center">' + ic('triangle-alert', 'ic-sm') + 'Gagal menyimpan, warna dikembalikan.</p>'
-        : '<p class="small muted" style="margin:10px 0 0;display:flex;gap:6px;align-items:center">' + ic('lock', 'ic-sm') + 'Hanya Admin yang dapat mengubah warna</p>') +
+      '<label class="swatch add" aria-label="Warna lain">' + ic('plus', 'ic-sm') + '<input type="color" data-custom value="' + U.esc(warna.toLowerCase()) + '"></label></div>' +
+      (statusWarna === 'ok' ? '<p class="small t-in" style="margin:10px 0 0;display:flex;gap:6px;align-items:center">' + ic('check', 'ic-sm') + 'Warna dipakai di HP ini.</p>'
+        : '<p class="small muted" style="margin:10px 0 0;display:flex;gap:6px;align-items:center">' + ic('smartphone', 'ic-sm') + '<span class="grow">Hanya berlaku di HP ini. HP anggota lain tidak ikut berubah.</span>' +
+          (UI.Tema.warnaHp() ? '<button class="link small" data-warna-bawaan>Pakai bawaan</button>' : '') + '</p>') +
       '<div class="hr"></div><div class="row" style="margin-bottom:10px"><span class="ico-c sm">' + ic('moon', 'ic-sm') + '</span><b style="font-weight:500">Mode tampilan</b></div>' +
       '<div class="seg" data-tema>' + [['TERANG', 'Terang'], ['GELAP', 'Gelap'], ['OTOMATIS', 'Otomatis']].map((m) => '<button data-v="' + m[0] + '" class="' + (UI.Tema.mode() === m[0] ? 'on' : '') + '">' + m[1] + '</button>').join('') + '</div>' +
       (L ? '<div class="hr"></div><div class="row" style="margin-bottom:10px"><span class="ico-c sm">' + ic('image', 'ic-sm') + '</span><b style="font-weight:500">Latar chat</b></div>' +

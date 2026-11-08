@@ -492,3 +492,22 @@ label.btn.sibuk { opacity: .6; pointer-events: none; }
 .suara-dot { width: 10px; height: 10px; border-radius: 50%; background: #DC2626; flex: none; animation: micKedip 1s ease-in-out infinite; }
 @keyframes micKedip { 50% { opacity: .25; } }
 @media (prefers-reduced-motion: reduce) { .mic.rekam, .suara-dot { animation: none; } }
+
+/* 1.0.17 — kartu rincian & "uang habis ke mana" */
+.rc .rc-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.rc .big { margin: 6px 0 4px; }
+.rc-sec { margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--line); }
+.rc-h { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
+.rc-row { padding: 6px 0; }
+.rc-top { display: flex; align-items: center; gap: 10px; }
+.rc-ik { flex: none; width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; background: var(--card-2); font-size: 15px; }
+.rc-l { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.rc-n { font-size: 14px; font-weight: 500; }
+.rc-s { font-size: 12px; color: var(--muted); }
+.rc-v { flex: none; font-size: 14px; }
+.rc-bar { height: 4px; border-radius: 99px; background: var(--track); margin-top: 6px; overflow: hidden; }
+.rc-row:has(.rc-ik) .rc-bar { margin-left: 38px; }
+.rc-bar > i { display: block; height: 100%; border-radius: 99px; background: var(--accent); }
+.rc-sorot { margin-top: 12px; padding: 10px 12px; border-radius: 10px; background: var(--tint); color: var(--text); font-size: 13px; line-height: 19px; }
+.rc-sorot > div + div { margin-top: 6px; }
+.rc-tawar { margin: 12px 0 0; font-size: 13px; font-weight: 600; }
