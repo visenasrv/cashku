@@ -75,7 +75,7 @@
       document.getElementById('app').innerHTML = '';
       if (ada) await App.mulaiSesi();
       UI.Router.route();
-      App.daftarSW();
+      if (g.Asli && g.Asli.aktif()) g.Asli.sehat(); else App.daftarSW();
     },
     async mulaiSesi() {
       g.Sync.mulai();
@@ -83,7 +83,8 @@
       g.DB.mintaPermanen();
       UI.Tema.terapkan();
       g.Sync.jadwal(200);
-      if (g.Pengingat) g.Pengingat.Alarm.mulai();
+      // APK Android: alarm asli; web/iPhone: alarm di layar + notifikasi PWA
+      if (g.Asli && g.Asli.aktif()) g.Asli.mulai(); else if (g.Pengingat) g.Pengingat.Alarm.mulai();
       const ruang = await g.DB.perkiraanRuang();
       if (ruang && ruang.quota && ruang.usage / ruang.quota > 0.9) UI.Toast.show('Penyimpanan HP hampir penuh', 'warn', 'Segera online agar data terkirim.');
       if (S.outbox.size > 500) UI.Toast.show(S.outbox.size + ' perubahan belum terkirim', 'warn', 'Segera sambungkan ke internet.');

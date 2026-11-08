@@ -21,8 +21,9 @@
         '<button class="hbtn" data-go="pengaturan" aria-label="Pengaturan">' + ic('settings') + '<span class="dot" data-usulan hidden></span></button>' +
         '</header>' +
         '<div class="chat-scroll" data-scroll aria-live="polite"></div>' +
-        '<div class="chat-bottom"><div class="chips scroll" data-saran></div>' +
-        '<div class="chat-input"><div class="box"><textarea rows="1" placeholder="Ketik transaksi atau pertanyaan…" enterkeyhint="send" aria-label="Pesan"></textarea></div>' +
+        '<div class="chat-bottom"><div class="chips scroll" data-saran></div><div class="suara-bar" data-suara hidden></div>' +
+        '<div class="chat-input"><div class="box"><textarea rows="1" placeholder="Ketik transaksi atau pertanyaan…" enterkeyhint="send" aria-label="Pesan"></textarea>' +
+        '<button class="mic" data-mic aria-label="Input suara" aria-pressed="false">' + ic('mic') + '</button></div>' +
         '<button class="send" aria-label="Kirim">' + ic('send-horizontal') + '</button></div></div>';
     },
     init(el) {
@@ -31,7 +32,8 @@
         const go = e.target.closest('[data-go]'); if (go) { UI.Router.go(go.dataset.go); return; }
         if (e.target.closest('[data-sync]')) { Chat.infoSinkron(); return; }
       });
-      const kirim = () => { const v = Chat.input.value; Chat.input.value = ''; Chat.autoTinggi(); Chat.kirim(v); };
+      const kirim = () => { if (g.Suara && g.Suara.aktif()) g.Suara.berhenti(); const v = Chat.input.value; Chat.input.value = ''; Chat.autoTinggi(); Chat.kirim(v); };
+      if (g.Suara) g.Suara.pasang(el);
       el.querySelector('.send').addEventListener('click', kirim);
       Chat.input.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); kirim(); }
@@ -45,7 +47,7 @@
       S.on('tx', (ids) => Chat.perbaruiTx(ids));
       S.on('outbox', () => Chat.statusHeader());
       S.on('sync', () => Chat.statusHeader());
-      S.on('master', () => { Chat.header(); Chat.saran(); });
+      S.on('master', () => { Chat.header(); Chat.saran(); if (g.Penasihat) g.Penasihat.cekTertunda(); });
     },
     show(el) {
       Chat.header(); Chat.saran(); Chat.statusHeader(); Chat.Latar.muat();
@@ -231,6 +233,8 @@
     }).join('') + '</div>';
   }
   const teksAman = (s) => U.esc(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/\n/g, '<br>');
+  Chat.chipsHtml = chipsHtml;
+  Chat.teksAman = teksAman;
 
   // =============================================================
   // Gaya bicara: santai & ramah, seperti asisten pribadi
@@ -301,7 +305,7 @@
   }
   Chat.txRowHtml = txRowHtml;
 
-  const RENDER = {
+  const RENDER = Chat.RENDER = {
     teks(m) { return { html: '<p>' + teksAman(m.data.teks) + '</p>' + chipsHtml(m) }; },
     pilihan(m) { return { html: '<p>' + teksAman(m.data.teks) + '</p>' + (m.data.sub ? '<p class="small muted">' + teksAman(m.data.sub) + '</p>' : '') + chipsHtml(m) }; },
     tx(m) {
@@ -515,6 +519,16 @@
       case 'salin':
         try { await navigator.clipboard.writeText(v.teks); UI.Toast.show('Disalin', 'success'); } catch (e) { UI.Toast.show('Tidak bisa menyalin otomatis', 'warn', 'Tekan lama teksnya untuk menyalin.'); }
         return;
+      case 'sesi': await tandai(m, i); return g.Atur.chip(v);
+      case 'isiKetik':
+        await tandai(m, i);
+        Chat.input.value = v.teks || ''; Chat.autoTinggi();
+        try { Chat.input.focus(); Chat.input.setSelectionRange(Chat.input.value.length, Chat.input.value.length); } catch (e) { /* abaikan */ }
+        return;
+      case 'pakaiVersi': await tandai(m, i); return g.Asli && g.Asli.pakaiSekarang(v);
+      case 'pnSesi': await tandai(m, i); return g.Penasihat.chip(v);
+      case 'pn': return g.Penasihat.aksi(m, i, v, tandai);
+      case 'targetHapusYa': await tandai(m, i); return g.Atur.targetHapusYa(v.id);
       case 'sapaYa': await tandai(m, i); return Chat.namaSet(Object.assign({}, v.it, { ragu: false }));
       case 'sapaPilih': {
         await tandai(m, i);
@@ -685,6 +699,9 @@
   };
 
   Chat.proses = async function (teks) {
+    // Sesi pengaturan aktif → pesan dibaca sebagai jawaban (bukan transaksi)
+    if (g.Atur && g.Atur.aktif() && await g.Atur.terima(teks)) return;
+    if (g.Penasihat && g.Penasihat.aktif() && await g.Penasihat.terima(teks)) return;
     if (Chat.pending) {
       const p = Chat.pending;
       const n = P.nominalSaja(teks);
@@ -695,6 +712,7 @@
         if (RE_YA.test(tt)) return p.jawab(true);
         if (RE_TIDAK.test(tt) || /^bukan\b/.test(tt)) return p.jawab(false);
       }
+      if (p.type === 'pnLunas' && p.jawab(teks)) { Chat.pending = null; return; }
       if (p.type === 'ingatanNilai' && teks.trim() && !/^(batal|tidak|nggak|ga jadi|gak jadi)$/i.test(teks.trim())) return p.jawab(teks.trim());
       if (p.type === 'ingatanPemilik' && teks.trim() && teks.trim().split(/\s+/).length <= 3 && !/^(batal|ga jadi|gak jadi|nggak jadi)$/i.test(teks.trim())) {
         const v = P.normal(teks).replace(/^(?:milik|punya|punyanya|atas nama|a\.?n\.?)\s+/, '').trim();
@@ -757,6 +775,13 @@
         return Chat.catatDrafts(it.drafts, teks);
       case 'konfirmasiTypo': return Chat.konfirmasiTypo(it, teks);
       case 'maksud': return Chat.maksud(it);
+      case 'atur': Chat.pending = null; return g.Atur.mulai(it.alur, it.data);
+      case 'aturMenu': return g.Atur.menu();
+      case 'penasihat': return g.Penasihat.mulai(it);
+      case 'penasihatRagu': return g.Penasihat.ragu(it);
+      case 'penasihatUbah': return g.Penasihat.ubahKondisi(it);
+      case 'targetDaftar': return g.Atur.targetDaftar();
+      case 'targetHapus': return g.Atur.targetHapus(it.kata);
       case 'namaSet': return Chat.namaSet(it);
       case 'namaTanya': return Chat.namaTanya();
       case 'ingatanSimpan': return Chat.ingatanSimpan(it);
@@ -1052,8 +1077,13 @@
     return Chat.tambah({ kind: 'pilihan', data: { teks: 'Baik, ' + S.sapa() + '. 😊', sub: 'Mau diganti? Ketik misalnya **panggil saya Bang ' + (S.saya.panggilan || 'Dani') + '** atau **panggil saya ' + (S.saya.panggilan || 'Dani') + ' saja**.' } });
   };
   Chat.namaTanya = function () {
-    if (!S.saya || !S.saya.panggilan) return Chat.sistem('Aku belum tahu nama panggilanmu 🙂 Ketik misalnya **nama saya Dani**.');
-    return Chat.sistem('Kamu ' + S.sapa() + ' 😊 Mau ganti? Ketik **panggil saya …**');
+    if (!S.saya) return;
+    const HUB = { KEPALA: 'kepala keluarga', SUAMI: 'suami', ISTRI: 'istri', ANAK: 'anak', LAINNYA: 'anggota keluarga' };
+    const peran = HUB[String(S.saya.hubungan || '').toUpperCase()] || (S.saya.peran === 'ADMIN' ? 'kepala keluarga' : S.saya.peran === 'ANAK' ? 'anak' : 'anggota keluarga');
+    const akun = 'akun **@' + (S.saya.username || S.saya.nama) + '**, ' + peran;
+    if (!S.saya.panggilan) return Chat.tambah({ kind: 'pilihan', data: { teks: 'Ini ' + akun + ' 🙂 Tapi aku belum tahu nama panggilanmu.', sub: 'Ketik misalnya **nama saya Dani**.' } });
+    return Chat.tambah({ kind: 'pilihan', data: { teks: G.kata('siapaSy', ['Tentu tahu dong 😊 Ini **{nama}**.', 'Ingat dong, ini **{nama}** 😊', 'Ini **{nama}**, kan? 😄']) + '\n(' + akun + ')',
+      sub: 'Mau ganti panggilan? Ketik **panggil saya …**' } });
   };
 
   // ---------- Catatan data: nomor rekening, PLN, telepon, dll ----------
@@ -1261,7 +1291,7 @@
     const st = g.Pengingat.Notif.status();
     const chips = [];
     if (st !== 'aktif') chips.push({ label: '🔔 Aktifkan alarm HP', aksi: 'notifAktif', tetap: true });
-    chips.push({ label: '📅 Simpan ke Kalender', aksi: 'kalender', nilai: { id: p.id_pengingat }, tetap: true });
+    if (!(g.Asli && g.Asli.aktif())) chips.push({ label: '📅 Simpan ke Kalender', aksi: 'kalender', nilai: { id: p.id_pengingat }, tetap: true });
     chips.push({ label: 'Ubah jam', aksi: 'pengingatUbahJam', nilai: { id: p.id_pengingat } });
     chips.push({ label: 'Hapus', aksi: 'pengingatHapusYa', nilai: { id: p.id_pengingat }, gaya: 'ghost' });
     return Chat.tambah({ kind: 'pilihan', data: {

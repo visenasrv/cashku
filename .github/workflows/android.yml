@@ -1,0 +1,111 @@
+# CashKu — membangun APK Android otomatis (tanpa Android Studio).
+# Berjalan saat isi folder _android berubah, atau manual: tab Actions → "Bangun APK CashKu" → Run workflow.
+# Butuh 3 secret (Settings → Secrets and variables → Actions): CASHKU_KUNCI_BASE64, CASHKU_KUNCI_SANDI, CASHKU_KUNCI_ALIAS.
+name: Bangun APK CashKu
+
+on:
+  push:
+    paths:
+      - '_android/**'
+      - '.github/workflows/android.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apk-cashku
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Ambil kode
+        uses: actions/checkout@v4
+
+      - name: Periksa kunci tanda tangan
+        env:
+          KUNCI: ${{ secrets.CASHKU_KUNCI_BASE64 }}
+          SANDI: ${{ secrets.CASHKU_KUNCI_SANDI }}
+        run: |
+          if [ -z "$KUNCI" ] || [ -z "$SANDI" ]; then
+            echo "::error::Secret CASHKU_KUNCI_BASE64 / CASHKU_KUNCI_SANDI belum diisi. Ikuti PANDUAN-APK.md bagian 'Kunci tanda tangan'."
+            exit 1
+          fi
+
+      - name: Pasang Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Pasang Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Pasang Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Siapkan tampilan & versi
+        working-directory: _android
+        run: |
+          npm ci --no-audit --no-fund
+          VERSI=$(grep -oE "U\.VERSI = '[^']+'" ../js/util.js | cut -d"'" -f2)
+          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          REPO="${{ github.event.repository.name }}"
+          URL="${{ vars.CASHKU_URL }}"
+          if [ -z "$URL" ]; then
+            if [ "$(echo "$REPO" | tr '[:upper:]' '[:lower:]')" = "$OWNER.github.io" ]; then URL="https://$OWNER.github.io/"; else URL="https://$OWNER.github.io/$REPO/"; fi
+          fi
+          node skrip/siapkan-www.js --url "$URL" --repo "${{ github.repository }}"
+          npx cap sync android
+          echo "VERSI=$VERSI" >> "$GITHUB_ENV"
+
+      - name: Pasang kunci tanda tangan
+        env:
+          KUNCI: ${{ secrets.CASHKU_KUNCI_BASE64 }}
+        run: |
+          echo "$KUNCI" | base64 -d > "$RUNNER_TEMP/cashku.jks"
+          echo "CASHKU_KUNCI_FILE=$RUNNER_TEMP/cashku.jks" >> "$GITHUB_ENV"
+
+      - name: Bangun APK
+        working-directory: _android/android
+        env:
+          CASHKU_BUILD: ${{ github.run_number }}
+          CASHKU_KUNCI_SANDI: ${{ secrets.CASHKU_KUNCI_SANDI }}
+          CASHKU_KUNCI_ALIAS: ${{ secrets.CASHKU_KUNCI_ALIAS }}
+        run: |
+          export CASHKU_VERSI="${VERSI}-b${{ github.run_number }}"
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon --stacktrace
+          NAMA="CashKu-${VERSI}-b${{ github.run_number }}.apk"
+          cp app/build/outputs/apk/release/app-release.apk "$RUNNER_TEMP/$NAMA"
+          cp app/build/outputs/apk/release/app-release.apk "$RUNNER_TEMP/CashKu.apk"
+          echo "NAMA_APK=$NAMA" >> "$GITHUB_ENV"
+          rm -f "$RUNNER_TEMP/cashku.jks"
+
+      - name: Simpan APK (Artifacts)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.NAMA_APK }}
+          path: ${{ runner.temp }}/${{ env.NAMA_APK }}
+          retention-days: 30
+
+      - name: Terbitkan di Releases
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: apk-b${{ github.run_number }}
+          name: CashKu APK ${{ env.VERSI }} (build ${{ github.run_number }})
+          make_latest: true
+          files: |
+            ${{ runner.temp }}/${{ env.NAMA_APK }}
+            ${{ runner.temp }}/CashKu.apk
+          body: |
+            **Cara pasang di HP Android**
+            1. Unduh **CashKu.apk** di bawah (buka halaman ini dari HP).
+            2. Buka berkasnya → bila diminta, izinkan **Instal aplikasi tidak dikenal** untuk browser/Files.
+            3. Ketuk **Instal**. Untuk memperbarui, pasang APK baru di atas yang lama (data tidak hilang).
+            4. Buka CashKu → Pengaturan → **Alarm Android** → aktifkan semua izin → **Tes alarm sekarang**.

@@ -1,0 +1,15 @@
+{
+  "name": "cashku-android",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Pembungkus Android (Capacitor) untuk CashKu — alarm asli & input suara",
+  "scripts": {
+    "siapkan-www": "node skrip/siapkan-www.js",
+    "sync": "npm run siapkan-www && npx cap sync android"
+  },
+  "dependencies": {
+    "@capacitor/android": "8.6.0",
+    "@capacitor/cli": "8.6.0",
+    "@capacitor/core": "8.6.0"
+  }
+}

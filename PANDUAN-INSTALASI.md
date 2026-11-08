@@ -145,6 +145,19 @@ Claude akan memandu tahap ini satu per satu di percakapan.
 | `bayar air tanggal 20 jam 9 ingatkan saya` · `ingetin bayar listrik besok jam 7` · `pengingat bayar air hapus` | Perintah pengingat boleh di mana saja dalam kalimat & boleh salah ketik |
 | `saya Dani` · `nama saya Dani` · `namaku Sinta` · `panggil aku Rafi` | CashKu memanggil sesuai peran: suami → *“Baik, Pak Dani.”*, istri → *“Baik, Bu Sinta.”*, anak → *“Baik, Rafi.”*. Bila peran belum jelas, CashKu bertanya sekali *“Saya panggil Bapak atau Ibu?”* |
 | `panggil saya Bang Dani` · `panggil saya Dani saja` · `siapa nama saya` | Sapaan pilihan sendiri, tanpa Pak/Bu, atau menanyakan nama panggilan |
+| `saya siapa` · `siapa aku` · `kamu tahu aku siapa?` · `kenal aku?` · `nama saya apa` | *“Tentu tahu dong 😊 Ini Pak Dani.”* (beserta akun & peran) |
+| `pengaturan` | Daftar pengaturan yang bisa dilakukan lewat chat |
+| `tambah akun` · `tambah akun Rina istri` | Tanya satu per satu: nama → peran (kepala keluarga / suami / istri / anak / lainnya) → izin lihat (anak) → username → password awal (boleh *Buatkan otomatis*) → ringkasan + **Simpan** |
+| `ubah peran Rina jadi anak` · `ganti nama akun Rina jadi Bunda` · `hapus akun Rafi` · `aktifkan akun Rafi` | Ubah akun. **“Hapus akun” = menonaktifkan**: tidak bisa masuk lagi, transaksinya tetap tersimpan |
+| `anggaran jajan 500rb` · `ubah anggaran makan jadi 1jt` · `anggaran total 5jt` · `atur anggaran` | Anggaran per kategori (bila sudah ada: *Rp500.000 → Rp750.000?*) |
+| `tambah kategori Hewan` · `ganti nama kategori hobi jadi Olahraga` | Kategori baru (jenis + ikon) / ganti nama |
+| `tambah dompet BCA` · `tambah dompet gopay saldo 200rb` | Dompet baru (jenis ditebak dari nama) |
+| `target tabungan motor 15jt 24 bulan` · `lihat target` · `hapus target motor` | Target tabungan + perkiraan setoran per bulan |
+| `penasihat` · `mulai penasihat` · `saran keuangan` · `atur keuangan` · `bagi gaji 5jt` | **Penasihat Keuangan**: 5 pertanyaan singkat (pendapatan, tanggungan, cicilan, dana darurat, tujuan) lalu kartu saran Kebutuhan / Keinginan / Tabungan dalam persen & rupiah. Angka di pesan langsung dipakai (`bagi gaji 5jt` → pertanyaan pendapatan dilewati) |
+| (di dalam sesi) `batal` · `lewati` · `lihat hasil sekarang` · `kembali` | Jawaban dibaca sebagai jawaban, bukan transaksi (`4`, `600rb` tidak tercatat). Salah ketik dimaklumi (`blm` = Belum) |
+| `motor 15jt 24 bulan, umroh 40jt 3 tahun` | Tujuan menabung (boleh lebih dari satu) |
+| Tombol **⚡ Percepat** · **Terapkan ke anggaran** · **Ubah angka** · **Tutup** | Percepat tujuan yang terlambat (dari jatah keinginan, tidak di bawah 5%). Terapkan mengisi anggaran per kategori, membuat target tabungan di dompet Tabungan, dan pengingat bulanan *Sisihkan tabungan*. Hanya kepala keluarga |
+| `tanggungan jadi 3` · `cicilan nambah 400rb` · `cicilan lunas` · `gaji naik jadi 6jt` · `dana darurat sudah cukup` | Hitung ulang tanpa mengulang pertanyaan → perbandingan sebelum/sesudah + **Terapkan bulan ini / Mulai bulan depan / Biarkan**. Bila ada kelonggaran (tanggungan berkurang / cicilan lunas) disarankan masuk tabungan |
 | `ingatkan saya bayar air setiap tanggal 20 jam 9` | Pengingat bulanan + alarm/notifikasi HP |
 | `ingatkan bayar listrik tanggal 27 November` | CashKu bertanya: *diulang setiap tanggal 27* atau *27 November saja*, lalu bertanya jamnya |
 | `ingatkan minum obat tiap hari jam 7 malam` · `ingatkan setiap senin jam 6 buang sampah` · `ingatkan 30 menit lagi angkat jemuran` · `ingatkan bayar kos setiap akhir bulan jam 10` | Pengingat harian, mingguan, sekali, akhir bulan, tahunan |
@@ -163,6 +176,41 @@ Claude akan memandu tahap ini satu per satu di percakapan.
 
 ## Memperbarui aplikasi
 
+> **Pembaruan 1.0.16 (input suara + aplikasi Android/APK + semua isi 1.0.14 & 1.0.15)** — cukup sekali pasang:
+> 1. Apps Script → ganti seluruh isi `Kode.gs` → **Simpan** → jalankan **`migrasiData`** sekali → **Deploy → Manage deployments → Edit → New version → Deploy**.
+> 2. Ikuti **PANDUAN-APK.md bagian 2**: isi 3 secret kunci APK di GitHub (sekali saja, sebelum push).
+> 3. Ekstrak ZIP ke folder repo (termasuk folder `_android` dan `.github`), lalu push. Tampilan web langsung terbarui; APK dibangun otomatis di tab **Actions** (±5–10 menit) dan terbit di **Releases**.
+>
+> **Input suara 🎤:** ketuk tombol mikrofon di samping kolom ketik, bicara, lalu periksa teksnya sebelum dikirim (tidak pernah terkirim otomatis). Rekaman suara tidak disimpan, hanya teksnya. Berhenti sendiri saat hening atau setelah 30 detik. Angka boleh diucapkan: *beli kopi dua puluh lima ribu*, *satu setengah juta*, *lima belas ribu lima ratus*. Beberapa transaksi boleh tanpa koma: *beli kopi dua puluh lima ribu bayar parkir lima ribu isi bensin tiga puluh ribu*. Di browser butuh internet (kecuali browser mendukung pengenalan di perangkat); di APK memakai pengenal suara Android.
+>
+> **Aplikasi Android:** alarm asli yang berbunyi walau HP terkunci/offline, layar penuh dengan [Matikan] [Tunda 10 menit] [Sudah bayar]. Panduan lengkap: **PANDUAN-APK.md**.
+>
+> **Pembaruan 1.0.15 (Penasihat Keuangan + semua isi 1.0.14)** — **server dan tampilan** berubah. Bila 1.0.14 belum dipasang, cukup pasang 1.0.15 ini:
+> 1. Apps Script → ganti seluruh isi `Kode.gs` → **Simpan** → pilih fungsi **`migrasiData`** → **Jalankan** sekali. Log harus menampilkan *✅ Migrasi selesai* (membuat Target_Tabungan + 6 sheet penasihat di bawah).
+> 2. **Deploy → Manage deployments → ikon pensil (Edit) → Version: New version → Deploy** (alamat /exec tetap sama).
+> 3. Push isi ZIP ke GitHub.
+>
+> **Sheet baru Penasihat Keuangan (boleh diubah sendiri):**
+> - **Pemicu** — `frasa`, `fitur`, `sumber`, `id_pengguna`, `aktif`, `dibuat_pada`. Kalimat yang memulai penasihat. Saat CashKu ragu dan Bapak/Ibu menjawab *Ya, mulai*, frasanya otomatis ditambahkan di sini.
+> - **Aturan_Penasihat** — `kunci`, `nilai`, `keterangan`. Angka aturan hitung: dasar 50/30/20, tambahan tanggungan +3/+6/+10, tabungan 25/22/20 sesuai dana darurat, cicilan tertampung 15% & peringatan 30%, batas keinginan ≥5% / tabungan ≥10% / kebutuhan ≤75%, 60% tabungan ke dana darurat, target dana darurat 3× kebutuhan, pembulatan 1.000.
+> - **Pertanyaan_Penasihat** — `kunci`, `urutan`, `teks`, `keterangan`, `pilihan`, `aktif`. Teks pertanyaan & tombolnya (pisahkan pilihan dengan koma). Pertanyaan tambahan dengan kunci baru ikut ditanyakan dan jawabannya disimpan di profil.
+> - **Pemetaan_Kategori** — `id_kategori`, `nama_kategori`, `kelompok` (KEBUTUHAN / KEINGINAN / TABUNGAN / ABAIKAN), `diubah_pada`. Kategori baru yang belum terpetakan ditanyakan sekali saat menerapkan.
+> - **Profil_Penasihat** — `id_profil`, `pendapatan`, `tanggungan`, `cicilan`, `dana_darurat`, `tujuan`, `ekstra_tabungan`, `lain`, `rencana_tertunda`, `berlaku_mulai`, `diubah_oleh`, `diubah_pada`. Data keluarga terakhir (dipakai saat *cicilan nambah 400rb* dan sejenisnya).
+> - **Riwayat_Penasihat** — `id_riwayat`, `waktu`, `id_pengguna`, `sumber`, `status` (SARAN / DITERAPKAN / BULAN_DEPAN / DIBIARKAN), `pendapatan`, `kebutuhan`, `keinginan`, `tabungan`, `rincian`, `profil`, `diterima_server`.
+>
+> **Cara kerja penerapan:** jatah kebutuhan (di luar cicilan, kecuali ada kategori bernama cicilan/kredit/angsuran) dan keinginan dibagi ke kategori sesuai pola belanja 90 hari terakhir. Bila anggaran sudah ada, CashKu minta konfirmasi dulu. *Mulai bulan depan* disimpan dan diterapkan otomatis di HP kepala keluarga saat tanggal 1 tiba. Transaksi lama tidak pernah diubah. Anggota lain bisa mencoba penasihat, tetapi hanya kepala keluarga yang bisa menerapkan.
+>
+> **Pembaruan 1.0.14 (pengaturan lewat chat, target tabungan, “saya siapa”)** — **server dan tampilan** berubah:
+> 1. Tempel `Kode.gs` baru → **Simpan** → jalankan **`migrasiData`** sekali (membuat sheet **Target_Tabungan**).
+> 2. **Deploy → Manage deployments → Edit → New version → Deploy**.
+> 3. Push isi ZIP ke GitHub.
+>
+> **Aturan pengaturan lewat chat:** satu pertanyaan per pesan dengan tombol jawaban. Ketik `batal` untuk berhenti, `kembali` untuk mengubah jawaban sebelumnya, `lewati` untuk bagian yang boleh dikosongkan. Selama sesi berjalan, pesan dibaca sebagai jawaban (misalnya `25rb` tidak tercatat sebagai pengeluaran). Bila 10 menit tidak dijawab, sesi ditutup dengan sopan. Hanya **kepala keluarga (Admin)** yang boleh mengubah akun, anggaran, kategori, dompet, dan target; anggota lain ditolak dengan sopan. Tambah akun, ubah akun, dan tambah dompet butuh internet; anggaran, kategori, dan target bisa offline.
+>
+> **Sheet Log_Pengaturan** mencatat setiap perubahan: `waktu`, `id_pengguna`, `nama`, `apa` (AKUN / ANGGARAN / KATEGORI / DOMPET / TARGET), `detail` (misalnya *Jajan Rp500.000 → Rp750.000/bulan*). Perubahan dari halaman Pengaturan juga ikut tercatat.
+>
+> **Sheet Target_Tabungan:** `id_target`, `nama`, `nominal`, `tenggat`, `id_dompet`, `id_pengguna`, `dibuat_pada`, `diubah_pada`, `aktif`, `diterima_server`. Akan dipakai juga oleh Penasihat Keuangan.
+>
 > **Pembaruan 1.0.13 (catatan fleksibel, pengingat urutan bebas, sapaan nama)** — **server dan tampilan** berubah:
 > 1. Apps Script → ganti seluruh isi `Kode.gs` dengan yang baru → **Simpan**.
 > 2. Pilih fungsi **`migrasiData`** → **Jalankan** (sekali). Hasilnya: sheet baru **Alias_Catatan** (daftar singkatan: `rek` → rekening, `pln`/`listrik`/`token`, `hp` → telepon, nama bank, pemilik) dan **Log_Pengaturan**, serta kolom baru di ujung kanan: **Ingatan** (`jenis`, `lembaga`, `pemilik`) dan **Pengguna** (`panggilan`, `sapaan`, `hubungan`). Data lama tidak diubah. Bila lupa, migrasi tetap berjalan otomatis saat aplikasi sinkron.

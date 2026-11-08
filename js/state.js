@@ -54,7 +54,7 @@
 
   S.keluar = async function () {
     S.token = ''; S.saya = null; S.tx = new Map(); S.outbox = new Map(); S.chat = [];
-    S.master = { kategori: [], kamus: [], dompet: [], anggaran: [], usulan: [], pengaturan: {}, anggota: [], typo: [], aturan: {}, ingatan: [], pengingat: [], alias: [] };
+    S.master = { kategori: [], kamus: [], dompet: [], anggaran: [], usulan: [], pengaturan: {}, anggota: [], typo: [], aturan: {}, ingatan: [], pengingat: [], alias: [], target: [], penasihat: {} };
     S.meta = { verMaster: '', sejak: 0, jendelaMulai: '', basisSaldo: {}, lastSync: 0, warn: {} };
     await g.DB.clearAll();
   };
@@ -105,7 +105,7 @@
       saya: S.saya, fiturDompet: S.fiturDompet(), hariIni: U.hariIni(),
       kategoriDefaultKeluar: S.kategoriDefault('KELUAR'), kategoriDefaultMasuk: S.kategoriDefault('MASUK'),
       riwayat: S.riwayatKata,
-      typo: S.master.typo || [], aturan: S.master.aturan || {}, ingatan: S.ingatanSaya(), aliasCatatan: S.master.alias || []
+      typo: S.master.typo || [], aturan: S.master.aturan || {}, ingatan: S.ingatanSaya(), aliasCatatan: S.master.alias || [], pemicu: (S.master.penasihat || {}).pemicu || []
     };
   };
   /** Sapaan: 'Pak' / 'Bu' / '' (nama saja) / sapaan pilihan sendiri; null = belum diketahui (perlu ditanya sekali) */
@@ -266,6 +266,19 @@
       m.ingatan = m.ingatan || [];
       const t = m.ingatan.find((e) => e.id_ingatan === x.id_ingatan);
       if (t) Object.assign(t, x); else m.ingatan.push(Object.assign({ id_pengguna: S.saya.id, lingkup: 'PRIBADI' }, x));
+    } else if (op.type === 'penasihat.profil') {
+      m.penasihat = m.penasihat || {};
+      m.penasihat.profil = Object.assign({}, x);
+    } else if (op.type === 'pemicu.put') {
+      m.penasihat = m.penasihat || {};
+      m.penasihat.pemicu = (m.penasihat.pemicu || []).filter((f) => f !== x.frasa).concat([x.frasa]);
+    } else if (op.type === 'pemetaan.put') {
+      m.penasihat = m.penasihat || {};
+      m.penasihat.pemetaan = Object.assign({}, m.penasihat.pemetaan || {}, { [x.id_kategori]: x.kelompok });
+    } else if (op.type === 'target.put') {
+      m.target = m.target || [];
+      const t = m.target.find((e) => e.id_target === x.id_target);
+      if (t) Object.assign(t, x); else m.target.push(Object.assign({}, x));
     } else if (op.type === 'ingatan.del') {
       m.ingatan = (m.ingatan || []).filter((e) => e.id_ingatan !== x.id_ingatan);
     } else if (/^pengingat\./.test(op.type)) {
@@ -304,6 +317,10 @@
       : type === 'kategori.put' ? 'kategori:' + data.id_kategori
       : type === 'anggaran.put' ? 'anggaran:' + data.id_anggaran
       : type === 'typo.put' ? 'typo:' + data.salah
+      : type === 'target.put' ? 'target:' + data.id_target
+      : type === 'penasihat.profil' ? 'penasihat:profil'
+      : type === 'pemicu.put' ? 'pemicu:' + data.frasa
+      : type === 'pemetaan.put' ? 'pemetaan:' + data.id_kategori
       : /^ingatan\./.test(type) ? 'ingatan:' + data.id_ingatan
       : type === 'pengingat.put' || type === 'pengingat.del' ? 'pengingat:' + data.id_pengingat
       : /^pengingat\./.test(type) ? 'pengingat:' + data.id_pengingat + ':' + type + ':' + Date.now()
@@ -314,7 +331,7 @@
   S.gantiMasterDariServer = async function (master, saya) {
     S.master = master;
     // Perubahan master lokal yang belum terkirim diterapkan lagi di atas data server
-    Array.from(S.outbox.values()).filter((o) => /^(kamus|kategori|anggaran|usulan|typo|ingatan|pengingat|profil)\./.test(o.type)).forEach((o) => S.terapkanOpMaster(o));
+    Array.from(S.outbox.values()).filter((o) => /^(kamus|kategori|anggaran|usulan|typo|ingatan|pengingat|profil|target|penasihat|pemicu|pemetaan)\./.test(o.type)).forEach((o) => S.terapkanOpMaster(o));
     if (saya) {
       S.saya = Object.assign({}, S.saya, saya);
       Array.from(S.outbox.values()).filter((o) => o.type === 'profil.put').forEach((o) => Object.assign(S.saya, o.data));

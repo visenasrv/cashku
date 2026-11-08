@@ -117,9 +117,13 @@
     if (PG) {
       const J = PG.Jadwal, nst = PG.Notif.status();
       const pg = (S.master.pengingat || []).filter((p) => p.id_pengguna === s.id && p.status === 'AKTIF').sort((a, b) => (a.berikutnya || 0) - (b.berikutnya || 0));
+      const apk = g.Asli && g.Asli.aktif();
       h += '<div class="sec">Pengingat & alarm</div><div class="card"><div class="row" style="gap:12px;align-items:flex-start"><span class="ico-c sm">' + ic('bell-ring', 'ic-sm') + '</span>' +
-        '<div class="grow"><b style="font-weight:500;display:block">Alarm di HP ini</b><span class="small ' + (nst === 'aktif' ? 't-in' : 'muted') + '">' + U.esc(PG.Notif.pesanStatus()) + '</span>' +
-        '<div class="row" style="gap:8px;margin-top:10px;flex-wrap:wrap">' + (nst === 'aktif' ? '<button class="btn sm soft" data-notif-uji>' + ic('bell-ring', 'ic-sm') + 'Tes alarm</button>' : (nst === 'belum' ? '<button class="btn sm" data-notif-aktif>' + ic('bell-ring', 'ic-sm') + 'Aktifkan alarm</button>' : '')) + '</div></div></div>' +
+        (apk
+          ? '<div class="grow"><b style="font-weight:500;display:block">Alarm Android</b><span class="small muted">Berbunyi walau HP terkunci atau offline, layar penuh, nada alarm.</span>' +
+            '<div class="row" style="gap:8px;margin-top:10px;flex-wrap:wrap"><button class="btn sm" data-go="izin-alarm">' + ic('shield-check', 'ic-sm') + 'Izin, tes & nada alarm</button></div></div></div>'
+          : '<div class="grow"><b style="font-weight:500;display:block">Alarm di HP ini</b><span class="small ' + (nst === 'aktif' ? 't-in' : 'muted') + '">' + U.esc(PG.Notif.pesanStatus()) + '</span>' +
+            '<div class="row" style="gap:8px;margin-top:10px;flex-wrap:wrap">' + (nst === 'aktif' ? '<button class="btn sm soft" data-notif-uji>' + ic('bell-ring', 'ic-sm') + 'Tes alarm</button>' : (nst === 'belum' ? '<button class="btn sm" data-notif-aktif>' + ic('bell-ring', 'ic-sm') + 'Aktifkan alarm</button>' : '')) + '</div></div></div>') +
         (pg.length ? '<div class="hr"></div>' + pg.map((p) => '<div class="row" style="gap:10px;padding:6px 0"><span class="ico-c sm">' + ic('clock', 'ic-sm') + '</span><span class="grow"><b style="font-weight:500;display:block">' + U.esc(p.judul) + '</b><span class="small muted">' + U.esc(J.label(p)) + '</span></span>' +
           '<button class="hbtn" style="color:var(--muted)" data-pgn-hapus="' + U.esc(p.id_pengingat) + '" data-judul="' + U.esc(p.judul) + '" aria-label="Hapus">' + ic('trash-2', 'ic-sm') + '</button></div>').join('')
           : '<p class="small muted" style="margin:12px 0 0">Belum ada pengingat. Ketik di chat, misalnya <b>ingatkan saya bayar air setiap tanggal 20 jam 9</b>.</p>') + '</div>';

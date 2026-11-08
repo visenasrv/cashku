@@ -2,11 +2,11 @@
 /* global importScripts, self, caches, indexedDB, clients */
 importScripts('js/config.js');
 
-const VERSI = 'cashku-1.0.13';
+const VERSI = 'cashku-1.0.16';
 const ASET = [
   './', 'index.html', 'manifest.webmanifest', 'css/style.css',
   'js/config.js', 'js/icons.js', 'js/util.js', 'js/db.js', 'js/api.js', 'js/state.js', 'js/parser.js', 'js/sync.js',
-  'js/ui.js', 'js/charts.js', 'js/chat.js', 'js/pengingat.js', 'js/pages-utama.js', 'js/laporan.js', 'js/pages-atur.js', 'js/app.js',
+  'js/ui.js', 'js/charts.js', 'js/suara.js', 'js/chat.js', 'js/atur.js', 'js/penasihat-hitung.js', 'js/penasihat.js', 'js/pengingat.js', 'js/asli.js', 'js/pages-utama.js', 'js/laporan.js', 'js/pages-atur.js', 'js/app.js',
   'js/vendor/jspdf.umd.min.js', 'js/vendor/jspdf.plugin.autotable.min.js',
   'fonts/pjs-400.woff2', 'fonts/pjs-500.woff2', 'fonts/pjs-600.woff2', 'fonts/pjs-700.woff2',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/maskable-512.png', 'icons/apple-touch-icon.png', 'icons/favicon-64.png'

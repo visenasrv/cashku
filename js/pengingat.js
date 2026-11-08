@@ -172,21 +172,25 @@
   const b64ke = (s) => { const pad = '='.repeat((4 - (s.length % 4)) % 4); const b = atob((s + pad).replace(/-/g, '+').replace(/_/g, '/')); return Uint8Array.from(b, (c) => c.charCodeAt(0)); };
   const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   const terpasang = () => (g.matchMedia && g.matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true;
+  const apk = () => !!(g.Asli && g.Asli.aktif());
   const Notif = {
     didukung() { return 'serviceWorker' in navigator && 'PushManager' in g && 'Notification' in g; },
     status() {
+      if (apk()) return 'aktif';                 // APK Android: alarm asli (bukan Web Push)
       if (!Notif.didukung()) return isIOS && !terpasang() ? 'ios-pasang' : 'tidak';
       if (Notification.permission === 'denied') return 'ditolak';
       try { if (Notification.permission === 'granted' && localStorage.getItem('cashku_push') === (S.saya && S.saya.id)) return 'aktif'; } catch (e) {}
       return 'belum';
     },
     pesanStatus() {
+      if (apk()) return 'Alarm Android aktif: berbunyi walau HP terkunci atau offline 🔔';
       return ({ aktif: 'Alarm & notifikasi aktif di HP ini 🔔', belum: 'Notifikasi belum diaktifkan di HP ini.', ditolak: 'Notifikasi diblokir. Buka pengaturan browser → Situs → Notifikasi, lalu izinkan CashKu.',
         'ios-pasang': 'Di iPhone/iPad, pasang CashKu ke Layar Utama dulu (Bagikan → Tambah ke Layar Utama), lalu buka dari ikonnya untuk mengaktifkan alarm.',
         tidak: 'Browser ini belum mendukung notifikasi. Pakai Chrome di Android, atau pasang CashKu ke Layar Utama di iPhone.' })[Notif.status()];
     },
     /** Harus dipanggil dari ketukan pengguna */
     async aktifkan() {
+      if (apk()) { UI.Router.go('izin-alarm'); return { ok: true, pesan: 'Atur izin alarm Android di halaman ini 📱' }; }
       const st = Notif.status();
       if (st === 'tidak' || st === 'ios-pasang' || st === 'ditolak') return { ok: false, pesan: Notif.pesanStatus() };
       if (navigator.onLine === false) return { ok: false, pesan: 'Perlu internet untuk mengaktifkan notifikasi.' };
@@ -208,6 +212,7 @@
       return { ok: true, pesan: 'Alarm aktif! HP ini akan berbunyi saat pengingat tiba, walau CashKu ditutup 🔔' };
     },
     async uji() {
+      if (apk()) { await g.Capacitor.Plugins.AlarmCashKu.tes({ detik: 10 }); return { ok: true, pesan: 'Alarm tes berbunyi 10 detik lagi ⏰ Kunci layar HP untuk mencoba layar alarm.' }; }
       const r = await g.API.api('pushUji', {}, { token: S.token });
       if (!r.success) return { ok: false, pesan: r.message || 'Gagal mengirim tes.' };
       if (!r.data.perangkat) return { ok: false, pesan: 'Belum ada HP yang terdaftar untuk notifikasi. Ketuk "Aktifkan alarm" dulu.' };

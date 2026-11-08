@@ -1,0 +1,10 @@
+{
+  "appId": "com.cashku.keluarga",
+  "appName": "CashKu",
+  "webDir": "www",
+  "android": {
+    "allowMixedContent": false,
+    "backgroundColor": "#008069"
+  },
+  "plugins": {}
+}
