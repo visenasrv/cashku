@@ -75,6 +75,8 @@
   S.peta = function () {
     if (S._peta) return S._peta;
     const m = S.master;
+    // 1.0.22: ikon babi tidak dipakai lagi (data lama di server diganti kantong uang)
+    (m.dompet || []).forEach((d) => { if (/\ud83d[\udc37\udc16\udc3d]/.test(String(d.ikon || ''))) d.ikon = '\ud83d\udcb0'; });
     S._peta = {
       kat: Object.fromEntries(m.kategori.map((k) => [k.id_kategori, k])),
       dompet: Object.fromEntries(m.dompet.map((d) => [d.id_dompet, d])),
@@ -104,7 +106,7 @@
     : /\b(me)?nabung\b/i.test(t.keterangan || '') ? 'Nabung'
     : /^(tarik tunai|ambil tabungan|setor tunai|top up .+)$/i.test(t.keterangan || '') ? U.huruf1(t.keterangan) : 'Pindah saldo';
   S.kelasJenis = (j) => (j === 'MASUK' ? 't-in' : j === 'KELUAR' ? 't-out' : 't-tr');
-  S.ikonTx = (t) => t.jenis === 'SALDO' ? '\u2696\ufe0f' : t.jenis === 'PINDAH' ? (S.judulTx(t) === 'Nabung' ? '\ud83d\udc37' : '\ud83d\udd04') : S.kat(t.id_kategori).ikon;
+  S.ikonTx = (t) => t.jenis === 'SALDO' ? '\u2696\ufe0f' : t.jenis === 'PINDAH' ? (S.judulTx(t) === 'Nabung' ? '\ud83d\udcb0' : '\ud83d\udd04') : S.kat(t.id_kategori).ikon;
   S.dompetAktif = () => S.master.dompet.filter((d) => d.aktif !== false);
   S.anggotaAktif = () => S.master.anggota.filter((a) => a.aktif !== false);
   S.kategoriAktif = (jenis) => S.master.kategori.filter((k) => k.aktif !== false && (!jenis || k.jenis === jenis)).sort((a, b) => (a.urutan || 0) - (b.urutan || 0));
@@ -443,7 +445,7 @@
     const ubah = (x) => ({ id: x.dompet.id_dompet, nama: x.dompet.nama, ikon: x.dompet.ikon || '💳', tipe: x.dompet.tipe, saldo: x.saldo, dompet: x.dompet });
     if (S.fiturDompet()) return per.map(ubah);
     const uang = per.filter((x) => x.dompet.tipe !== 'TABUNGAN').reduce((a, x) => a + x.saldo, 0) + S.saldoTanpaDompet();
-    return [{ id: 'UANG', nama: 'Uang', ikon: '💰', tipe: 'UANG', saldo: uang }].concat(per.filter((x) => x.dompet.tipe === 'TABUNGAN').map(ubah));
+    return [{ id: 'UANG', nama: 'Uang', ikon: '👛', tipe: 'UANG', saldo: uang }].concat(per.filter((x) => x.dompet.tipe === 'TABUNGAN').map(ubah));
   };
 
   S.rentangAnggaran = function (a, ref) {

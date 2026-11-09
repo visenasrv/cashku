@@ -181,6 +181,17 @@
       root.style.setProperty('--focus-ring', U.alpha(t.accent, 0.15));
       const meta = U.$('meta[name="theme-color"]');
       if (meta) meta.setAttribute('content', Tema.gelap() ? '#202C33' : t.primary);
+      Tema.bilahHp();
+    },
+    /** APK: ikon jam/baterai selalu putih (kepala halaman berwarna), tombol bawah HP mengikuti mode terang/gelap */
+    bilahHp() {
+      try {
+        const B = g.Capacitor && g.Capacitor.isNativePlatform && g.Capacitor.isNativePlatform() && g.Capacitor.Plugins && g.Capacitor.Plugins.SystemBars;
+        if (!B) return;
+        const p1 = B.setStyle({ style: 'DARK', bar: 'StatusBar' });
+        const p2 = B.setStyle({ style: Tema.gelap() ? 'DARK' : 'LIGHT', bar: 'NavigationBar' });
+        [p1, p2].forEach((p) => { if (p && p.catch) p.catch(() => {}); });
+      } catch (e) {}
     }
   };
   if (g.matchMedia) g.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => Tema.terapkan());

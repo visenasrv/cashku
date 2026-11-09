@@ -271,7 +271,7 @@
       if ((warn || []).some((w) => w.level === 2)) return G.kata('w2', ['Sudah aku catat ✅ Tapi ada anggaran yang kebablasan nih 👇', 'Tercatat! Eh, ada anggaran yang sudah lewat batas 👇']);
       if ((warn || []).length) return G.kata('w1', ['Sudah aku catat ✅ Anggarannya mulai menipis, hati-hati ya 👇', 'Tercatat! Tapi anggarannya hampir habis nih 👇']);
       const tabungan = (t) => t.jenis === 'PINDAH' && S.dompet(t.id_dompet_tujuan) && S.dompet(t.id_dompet_tujuan).tipe === 'TABUNGAN';
-      if (txs.every(tabungan)) return G.kata('nabung', ['Mantap, rajin nabung! 🐷 Sudah aku catat.', 'Asyik, tabungan nambah! 🐷✨', 'Keren, nabung terus ya! 🐷 Sudah tercatat.']);
+      if (txs.every(tabungan)) return G.kata('nabung', ['Mantap, rajin nabung! 💰 Sudah aku catat.', 'Asyik, tabungan nambah! ✨', 'Keren, nabung terus ya! 💪 Sudah tercatat.']);
       if (txs.every((t) => t.jenis === 'PINDAH')) return G.kata('pindah', ['Oke, pindah saldonya sudah aku catat 🔄', 'Siap, saldonya sudah aku pindahkan di catatan 🔄']);
       if (txs.some((t) => t.jenis === 'MASUK')) return G.kata('masuk', ['Yeay, ada rezeki masuk! 💰 Sudah aku catat.', 'Asyik, ada uang masuk! 🎉 Tercatat ya.', 'Sip, pemasukannya sudah aku catat 💰']);
       if (n > 1) return G.kata('banyak', ['Siap, semuanya sudah aku catat ✅', 'Beres, sekaligus semua 👌', 'Oke, langsung aku catat semua 📝']);
@@ -1743,8 +1743,8 @@
       });
   };
   const PINDAH_Q = {
-    nabung: { judul: '🐷 Nabung', f: (t, tp) => tp(t.id_dompet_tujuan) === 'TABUNGAN' || /\bnabung\b/i.test(t.keterangan || '') },
-    ambiltab: { judul: '🐷 Ambil tabungan', f: (t, tp) => tp(t.id_dompet) === 'TABUNGAN' },
+    nabung: { judul: '💰 Nabung', f: (t, tp) => tp(t.id_dompet_tujuan) === 'TABUNGAN' || /\bnabung\b/i.test(t.keterangan || '') },
+    ambiltab: { judul: '💰 Ambil tabungan', f: (t, tp) => tp(t.id_dompet) === 'TABUNGAN' },
     topup: { judul: '📱 Top up', f: (t, tp) => tp(t.id_dompet_tujuan) === 'EWALLET' },
     tarik: { judul: '🏧 Tarik tunai', f: (t, tp) => tp(t.id_dompet_tujuan) === 'TUNAI' && tp(t.id_dompet) === 'REKENING' },
     setor: { judul: '🏦 Setor tunai', f: (t, tp) => tp(t.id_dompet) === 'TUNAI' && tp(t.id_dompet_tujuan) === 'REKENING' },

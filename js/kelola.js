@@ -21,7 +21,7 @@
   }
   function semuaDompet() {
     if (S().fiturDompet()) return S().dompetAktif();
-    return S().saldoRingkas().map((x) => (x.id === 'UANG' ? { id_dompet: 'UANG', nama: 'Uang', ikon: '💰', tipe: 'UANG' } : x.dompet));
+    return S().saldoRingkas().map((x) => (x.id === 'UANG' ? { id_dompet: 'UANG', nama: 'Uang', ikon: '👛', tipe: 'UANG' } : x.dompet));
   }
   /** Dompet yang dituju: dipilih, atau semua dompet aktif */
   function daftarDompet(ids) {

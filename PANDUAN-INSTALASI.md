@@ -176,6 +176,13 @@ Claude akan memandu tahap ini satu per satu di percakapan.
 
 ## Memperbarui aplikasi
 
+> **Pembaruan 1.0.22 (semua isi 1.0.19–1.0.21 + perbaikan di bawah)**: ganti `Kode.gs` → **Simpan** → **Kelola deployment → Edit → Versi baru → Terapkan**, lalu push ZIP. Tidak ada APK baru.
+> - **Ikon Tabungan bukan babi lagi**, diganti kantong uang 💰. Data dompet lama di Google Sheet ikut diganti otomatis saat pertama login setelah update. Saldo gabungan saat fitur dompet nonaktif memakai ikon 👛 *Uang*.
+> - **Tombol bawaan HP (kembali · beranda · menu) tidak tercampur tampilan lagi.**
+>   - Di belakang tombol HP sekarang ada latar polos sewarna halaman, jadi isi halaman tidak terlihat di belakangnya saat digulir.
+>   - Warna tombol HP ikut mode Terang/Gelap aplikasi.
+>   - Berlaku otomatis di APK yang sudah terpasang (tidak perlu pasang APK baru).
+>
 > **Pembaruan 1.0.21 (semua isi 1.0.19–1.0.20 + perbaikan di bawah)**: ganti `Kode.gs` → **Simpan** → **Kelola deployment → Edit → Versi baru → Terapkan**, lalu push ZIP. Tidak ada APK baru.
 > - **Admin bukan "kepala keluarga" lagi.**
 >   - Peran di CashKu: **Admin** (boleh ayah atau ibu), **Dewasa**, atau **Anak**.

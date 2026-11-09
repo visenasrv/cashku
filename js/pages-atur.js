@@ -438,7 +438,7 @@
         '<span class="grow"><b style="display:block;font-weight:600">Atur ulang saldo</b><span class="small muted">Jadikan saldo dompet 0 (atau angka baru). Riwayat transaksi tetap ada. Bisa juga lewat chat: <b>reset saldo gopay</b>.</span>' +
         '<button class="btn sm danger" style="margin-top:10px" data-saldo-ulang>Atur ulang saldo…</button></span></div></div>' +
         '<p class="help" style="margin-top:12px">Alias adalah kata yang dikenali di chat untuk dompet ini, misalnya “bri” atau “gopay”.</p>' +
-        '<p class="help">🐷 <b>Tabungan</b> adalah uang yang disisihkan. Chat <b>nabung 1jt</b> masuk ke Tabungan, dan Tabungan tidak ditawarkan saat membayar kecuali disebut (<b>beli hp 3jt dari tabungan</b>). Matikan lewat tombol <b>Aktif</b> bila tidak dipakai.</p>';
+        '<p class="help">💰 <b>Tabungan</b> adalah uang yang disisihkan. Chat <b>nabung 1jt</b> masuk ke Tabungan, dan Tabungan tidak ditawarkan saat membayar kecuali disebut (<b>beli hp 3jt dari tabungan</b>). Matikan lewat tombol <b>Aktif</b> bila tidak dipakai.</p>';
     }
   });
   function ubahDompet(id) {
@@ -446,7 +446,7 @@
     const st = Object.assign({}, d);
     const sh = UI.Sheet.open({ title: id ? 'Ubah Dompet' : 'Dompet Baru', html:
       '<label class="field"><span class="lbl">Nama dompet</span><input class="input" data-nama maxlength="30" value="' + U.esc(st.nama) + '" placeholder="Contoh: BRI Ayah, GoPay Bunda"></label>' +
-      '<span class="lbl" style="margin-top:16px">Jenis</span><div class="seg seg-4" data-tipe><button data-v="TUNAI">💵 Tunai</button><button data-v="REKENING">🏦 Rek</button><button data-v="EWALLET">📱 E-Wallet</button><button data-v="TABUNGAN">🐷 Tabungan</button></div>' +
+      '<span class="lbl" style="margin-top:16px">Jenis</span><div class="seg seg-4" data-tipe><button data-v="TUNAI">💵 Tunai</button><button data-v="REKENING">🏦 Rek</button><button data-v="EWALLET">📱 E-Wallet</button><button data-v="TABUNGAN">💰 Tabungan</button></div>' +
       '<span class="lbl" style="margin-top:16px">Pemilik</span><button class="pick" data-pem></button>' +
       '<div class="row2" style="margin-top:16px"><label><span class="lbl">Saldo awal</span><div class="input-wrap"><span class="pre" style="font-size:14px">Rp</span><input class="input num" data-saldo value="' + U.fmtInput(st.saldo_awal) + '" placeholder="0"></div></label>' +
       '<label><span class="lbl">Per tanggal</span><input class="input" type="date" data-tgl value="' + U.esc(st.tanggal_saldo_awal || U.hariIni()) + '"></label></div>' +
