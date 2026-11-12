@@ -14,7 +14,10 @@
     tdk: 'tidak', sy: 'saya', sdh: 'sudah', udh: 'sudah', blm: 'belum', jg: 'juga', bsk: 'besok', besuk: 'besok', skrg: 'sekarang', skrng: 'sekarang',
     jm: 'jam', mnt: 'menit', pkl: 'pukul', tlg: 'tolong', gmn: 'gimana', kpn: 'kapan', hrg: 'harga', dmn: 'dimana', nmr: 'nomor', nomer: 'nomor',
     nmer: 'nomor', norek: 'nomor rekening', klo: 'kalau', kalo: 'kalau', ingetin: 'ingatkan', ingatin: 'ingatkan', ingetkan: 'ingatkan', ingatkn: 'ingatkan',
-    inget: 'ingat', simpen: 'simpan', catet: 'catat'
+    inget: 'ingat', simpen: 'simpan', catet: 'catat',
+    msk: 'masuk', klr: 'keluar', kluar: 'keluar', pngeluaran: 'pengeluaran', pmasukan: 'pemasukan', pndapatan: 'pendapatan', tbgn: 'tabungan', tabgan: 'tabungan',
+    sldo: 'saldo', saldoku: 'saldo saya', duwit: 'duit', fulus: 'uang', gajih: 'gaji', gajiannya: 'gajian', rwyt: 'riwayat', trx: 'transaksi',
+    mggu: 'minggu', minggon: 'minggu', taun: 'tahun', thun: 'tahun', bulan2: 'bulan', hri: 'hari', hrini: 'hari ini', td: 'tadi', tdi: 'tadi', liatin: 'lihatkan'
   };
   // Kata umum yang sah (tidak boleh "dikoreksi" menjadi kata lain)
   const UMUM = ['apa', 'apaan', 'kapan', 'mana', 'dimana', 'gimana', 'bagaimana', 'siapa', 'kenapa', 'mengapa', 'apakah', 'berapakah', 'kah', 'itu', 'ini',
@@ -49,7 +52,9 @@
     'termahal', 'termurah', 'paling', 'besar', 'kecil', 'banyak', 'boros', 'hemat', 'harian', 'mingguan', 'bulanan', 'tahunan', 'setiap',
     'tiap', 'pekan', 'sehari', 'seminggu', 'sebulan', 'setahun', 'kategori', 'siapa', 'belakangan', 'average', 'satu', 'dua', 'tiga',
     'empat', 'lima', 'enam', 'tujuh', 'delapan', 'sembilan', 'sepuluh', 'sebelas', 'belas', 'puluh',
-    'rincian', 'perincian', 'rinci', 'detail', 'sering', 'tersering', 'kemana', 'uangku', 'duitku', 'pengeluaranku'].concat(BULAN);
+    'rincian', 'perincian', 'rinci', 'detail', 'sering', 'tersering', 'kemana', 'uangku', 'duitku', 'pengeluaranku',
+    'masuk', 'keluar', 'pendapatan', 'penghasilan', 'riwayat', 'histori', 'mutasi', 'catatan', 'daftar', 'rangkuman', 'keuangan', 'kondisi', 'keadaan',
+    'tabungan', 'tunai', 'rekening', 'dompet', 'uang', 'duit', 'cek', 'lihat', 'tampilkan', 'sekarang', 'tinggal'].concat(BULAN);
   const VOCAB_SET = new Set(VOCAB);
   const STOP = ['beli', 'membeli', 'dibeli', 'bayar', 'bayarin', 'membayar', 'dibayar', 'buat', 'untuk', 'tadi', 'sebesar', 'seharga',
     'harga', 'rp', 'sih', 'ya', 'dong', 'nih', 'aja', 'saja', 'yang', 'barusan', 'td'];
@@ -784,6 +789,7 @@
       const kk = idx.katAktif[d.id_kategori];
       ket = kat ? kat.frasa : (kk ? kk.nama : 'Transaksi');
     }
+    if (/^(uang|duit|dana)$/.test(ket)) ket = jenis === 'MASUK' ? 'uang masuk' : jenis === 'KELUAR' ? 'uang keluar' : ket;   // "uang masuk 500rb" → "Uang masuk"
     d.keterangan = U_huruf1(ket);
     d.frasaBelajar = ket.split(' ').slice(0, 3).join(' ');
     if (!kat && (kataUmum(d.frasaBelajar) || kataUmum(ket))) d.frasaBelajar = 'belanja';
@@ -1018,7 +1024,8 @@
   /** Skor 0–1: seberapa yakin kata w adalah salah ketik dari kata c */
   function skorKandidat(w, c, verba) {
     if (w === c) return 1;
-    if (w[0] !== c[0] && !(w[0] === c[1] && w[1] === c[0])) return 0;   // huruf pertama jarang salah
+    // huruf pertama jarang salah — kecuali tombol bersebelahan dan sisanya sama persis ("nasuk" → "masuk", "kaluar" tidak)
+    if (w[0] !== c[0] && !(w[0] === c[1] && w[1] === c[0])) return w.length >= 5 && w.length === c.length && w.slice(1) === c.slice(1) && tetangga(w[0], c[0]) ? 0.86 : 0;
     if (vokalHilang(w, c)) return c.length - w.length <= 2 || w.length >= 5 ? 0.95 : 0.88;
     const d = osa(w, c);
     if (d === 1) {
@@ -1876,6 +1883,60 @@
     return r;
   }
 
+  // =============================================================
+  // 1.0.23 — Pertanyaan pendek tanpa kata tanya: "Uang tunai", "Tabungan", "uang masuk bulan ini", "bulan ini", "riwayat gopay".
+  // Semua kata harus dikenali (dompet, uang, masuk/keluar, riwayat, periode, kata pengisi) supaya catatan transaksi tidak ikut terbaca sebagai pertanyaan.
+  const POLOS_ISI = new Set(('saya aku ku sy gue gw kami kita keluarga di ke dalam yang yg punya punyaku milik ada isinya sekarang skrg skg saat masih tinggal tersisa jadi total totalnya jumlah ' +
+    'semua seluruh cek lihat liat lihatin tampilkan tunjukkan tunjukin info infokan coba tolong dong ya yah deh sih nih tuh kak min bang berapa brp berapakah gimana bagaimana ' +
+    'kok sudah udah sdh lagi mau ingin pengen pingin tahu tau kasih minta per untuk buat utk cashku nya mu kamu apa aja saja sj dari dgn dengan selama hingga sampai rp rupiah ' +
+    'kah ini itu dan atau sama serta & kondisi keadaan situasi gambaran posisi status').split(' '));
+  const POLOS_UANG = /^(uang|duit|dana|saldo|sisa|sisanya|dompet)$/;
+  const POLOS_MASUK = /^(masuk|pemasukan|pemasukkan|pendapatan|penghasilan|income|diterima)$/;
+  const POLOS_KELUAR = /^(keluar|pengeluaran|belanja|belanjaan|habis|abis|spending|terpakai|kepakai|kepake|keluarin)$/;
+  const POLOS_RIWAYAT = /^(riwayat|histori|history|mutasi|transaksi|catatan|daftar|aktivitas)$/;
+  const POLOS_RINGKAS = /^(ringkasan|rekap|rangkuman|ikhtisar|summary|keuangan|finansial)$/;
+  const POLOS_PERIODE = new RegExp('^(?:hari|minggu|pekan|bulan|tahun|ini|lalu|kemarin|terakhir|tanggal|belakangan|\\d+|' + NAMA_BULAN_RE + ')$');
+  const kunciPolos = (b) => POLOS_UANG.test(b) || POLOS_MASUK.test(b) || POLOS_KELUAR.test(b) || POLOS_RIWAYAT.test(b) || POLOS_RINGKAS.test(b);
+  function tanyaPolos(t, ctx, idx, per, adaPeriode) {
+    let s = ' ' + t.replace(/[?!.,;:()"]/g, ' ').replace(/\s+/g, ' ').trim() + ' ';
+    // akhiran -ku/-nya/-mu pada kata kunci: "tabunganku", "uangnya", "pemasukanku"
+    s = s.replace(/ ([a-z]{3,}?)(ku|nya|mu)(?= )/g, (x, b) => (kunciPolos(b) || idx.dompet.some((e) => e.frasa === b) ? ' ' + b : x));
+    s = s.replace(/ e ?- ?wallet(?= )/g, ' ewallet').replace(/ isi(nya)? (dompet|uang|duit)(?= )/g, ' $2').replace(/\s+/g, ' ');
+    // kata kategori ("tahu", "uang saku", "transfer masuk") atau penanda pindah saldo ("tarik tunai", "transfer ke") → bukan pertanyaan polos
+    if (cariSemua(s, idx.kat).some((k) => !kataUmum(k.frasa))) return null;
+    if (cariSemua(s, idx.pindah).some((e) => !/^(me)?nabung$/.test(e.frasa))) return null;
+    const dq = cariDompetQ(s.trim(), idx);
+    const dompetNyata = dq && dq.frasa !== 'dompet';
+    if (dompetNyata && /^(transfer|tf|trf|qris|scan qris|scan qr|qr code|kode qr)$/.test(dq.frasa) && !/\b(saldo|riwayat|histori|mutasi)\b/.test(s)) return null;
+    let sisa = s;
+    if (dompetNyata) sisa = sisa.replace(new RegExp(' ' + dq.frasa.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?= )'), ' ');
+    const kata = sisa.trim().split(' ').filter(Boolean);
+    const f = { uang: 0, masuk: 0, keluar: 0, riwayat: 0, ringkas: 0, nabung: 0, periode: 0 };
+    for (const w of kata) {
+      if (POLOS_ISI.has(w)) continue;
+      if (POLOS_MASUK.test(w)) f.masuk++;
+      else if (POLOS_KELUAR.test(w)) f.keluar++;
+      else if (POLOS_UANG.test(w)) f.uang++;
+      else if (POLOS_RIWAYAT.test(w)) f.riwayat++;
+      else if (POLOS_RINGKAS.test(w)) f.ringkas++;
+      else if (/^(me)?nabung$/.test(w)) f.nabung++;
+      else if (adaPeriode && POLOS_PERIODE.test(w)) f.periode++;
+      else return null;                                        // ada kata lain → bukan pertanyaan polos
+    }
+    if (!dompetNyata && !f.uang && !f.masuk && !f.keluar && !f.riwayat && !f.ringkas && !f.nabung && !adaPeriode) return null;
+    const q = { type: 'tanya', polos: true };
+    if (per.ok) q.periode = per; else if (adaPeriode) q.periodeError = per;
+    const isiDompet = () => { if (dompetNyata) { if (dq.id) q.dompet = dq.id; else q.dompetAmbigu = dq.ambigu; } };
+    if (f.masuk && f.keluar) { q.metric = 'ringkasan'; isiDompet(); return q; }
+    if (f.masuk || f.keluar) { q.metric = f.masuk ? 'masuk' : 'keluar'; isiDompet(); return q; }
+    if (f.nabung) { if (!adaPeriode && !f.riwayat) return null; q.metric = 'pindah'; q.pindah = 'nabung'; return q; }
+    if (f.riwayat) { q.metric = dompetNyata && !adaPeriode ? 'saldo' : 'daftar'; isiDompet(); return q; }   // "riwayat tabungan" → kartu saldo + gerakan terakhir
+    if (f.ringkas) { q.metric = 'ringkasan'; isiDompet(); return q; }
+    if (dompetNyata) { q.metric = adaPeriode ? 'daftar' : 'saldo'; isiDompet(); return q; }
+    if (adaPeriode) { q.metric = per.ok && per.jenis === 'hari' ? 'daftar' : 'ringkasan'; return q; }
+    q.metric = 'saldo'; return q;                                // "uangku", "sisa", "dompet"
+  }
+
   function inti(t0, ctx, idx, at) {
     let m;
     const nomAwal = cariNominal(tutupBukanNominal(t0));
@@ -1905,11 +1966,14 @@
       }
       return r;
     }
-    if (/^(laporan|rekap laporan|lihat laporan)$/.test(t)) return { type: 'laporan_ambigu' };
+    if (/^(?:lihat |liat |cek |minta |buka )?(laporan|rekap laporan)(?: keuangan| keuanganku| saya| keluarga| kita)?$/.test(t)) return { type: 'laporan_ambigu' };
 
     // ---- 1.0.17: rincian per kategori/kata, "uangku habis ke mana", "paling sering beli apa" ----
     const rq = rincianDari(t, ctx, idx, per, adaPeriode, nominalKuat);
     if (rq) { rq.perubahan = kor.perubahan; rq.teksKoreksi = t; return rq; }
+
+    // ---- 1.0.23: pertanyaan pendek tanpa kata tanya ("Uang tunai", "Tabungan", "uang masuk bulan ini") ----
+    if (!nominalKuat) { const pq = tanyaPolos(t, ctx, idx, per, adaPeriode); if (pq) { pq.perubahan = kor.perubahan; pq.teksKoreksi = t; return pq; } }
 
     // ---- Maksud pesan: dinilai dari beberapa petunjuk sekaligus (bobot di sheet Aturan_Parser) ----
     const fk = frasaKategoriQ(t), fh = frasaHargaQ(t);
@@ -1932,7 +1996,7 @@
     const skorTx = (nominalKuat ? at.bobot_nominal : 0) + (/^(beli|bayar|isi|jajan|makan|belanja|transfer|kirim|setor|tarik|nabung|gaji|terima|dapat|catat)\b/.test(t) ? at.bobot_kata_kerja : 0);
     const kataTanya = skorTanya >= at.ambang_tanya && (skorTanya >= skorTx || skorTanya >= at.ambang_tanya + at.bobot_tanda_tanya);
     const katHit = cariSemua(t, idx.kat).filter((k) => !kataUmum(k.frasa)).sort((a, b) => b.len - a.len)[0];
-    if (kataTanya || (!nominalKuat && adaPeriode && (katHit || /\b(transaksi|catatan|riwayat)\b/.test(t) || per.jenis === 'hari'))) {
+    if (kataTanya || (!nominalKuat && adaPeriode && (katHit || /\b(transaksi|catatan|riwayat)\b/.test(t) || per.jenis === 'hari' || idx.pindah.some((e) => ada(t, e.frasa))))) {
       const q = { type: 'tanya', perubahan: kor.perubahan, teksKoreksi: t, skor: { tanya: skorTanya, transaksi: skorTx } };
       if (fh) { q.metric = 'harga'; q.kata = fh; const kh = cariSemua(fh, idx.kat)[0]; if (kh) q.kategori = kh.target; return q; }
       if (per.ok) q.periode = per; else if (adaPeriode) q.periodeError = per;
@@ -2013,6 +2077,14 @@
 
     // Kata kunci tanpa nominal → minta nominal; satu kata saja ("kopi") → tanyakan maksudnya
     if (/\b(me)?nabung\b/.test(t0)) return { type: 'butuh_nominal', keterangan: 'Nabung', jenis: 'PINDAH', teks: t0 };
+    const phPindah = !kt && !adaPeriode && cariSemua(t0, idx.pindah).sort((a, b) => b.len - a.len)[0];
+    if (phPindah && !(katHit && katHit.len > phPindah.len) && !/\b(saldo|riwayat|histori|berapa)\b/.test(t0)) return { type: 'butuh_nominal', keterangan: U_huruf1(phPindah.frasa), jenis: 'PINDAH', teks: t0 };
+    // "isi gopay", "isi tabungan" tanpa nominal → isi saldo dompet itu, tanya nominalnya
+    const dqIsi = /^isi\s/.test(t0) && !adaPeriode && cariDompetQ(t0, idx);
+    if (dqIsi && !/^(tunai|cash|kas|kes|kontan|uang tunai|dompet)$/.test(dqIsi.frasa) && t0.replace(/^isi\s+(?:saldo\s+)?/, '').trim() === dqIsi.frasa)
+      return { type: 'butuh_nominal', keterangan: 'Isi ' + dqIsi.frasa, jenis: 'PINDAH', teks: t0 };
+    const vk = /^(beli|bayar|isi|belanja|transfer|tf|kirim|setor|catat|pesan|order|terima|dapat)$/.exec(t0.replace(/[?!.,]/g, '').trim().split(/\s+/).filter((w) => !/^(dong|ya|nih|deh|sih|mau|saya|aku|tolong)$/.test(w)).join(' '));
+    if (vk) return { type: 'kurang_lengkap', kata: vk[1], teks: t0 };
     const isi = t0.replace(/[?!.,]/g, ' ').split(/\s+/).filter((w) => w && STOP.indexOf(w) < 0 && !/^(dong|ya|nih|deh|sih)$/.test(w));
     const adaKerja = /\b(beli|bayar|isi|jajan|belanja|catat|pesan|order|servis|ganti|sewa|makan|minum)\b/.test(t0);
     if (katHit && !adaKerja && !kt && isi.length <= 3) return { type: 'maksud', kata: isi.join(' '), kategori: katHit.target, jenis: katHit.jenis, dikenal: true, teks: t0 };
@@ -2023,7 +2095,12 @@
     // Tidak dikenali → rekomendasi
     const saran = [];
     if (/\b(laporan|unduh|download)\b/.test(t)) saran.push({ label: 'Unduh laporan bulan ini', teks: 'unduh laporan bulan ini' });
-    if (/\b(saldo|dompet|uang)\b/.test(t)) saran.push({ label: 'Saldo semua dompet', teks: 'saldo' });
+    const dqx = cariDompetQ(t, idx);
+    if (dqx && dqx.id) saran.push({ label: 'Saldo ' + ((idx.dompetById[dqx.id] || {}).nama || dqx.frasa), teks: 'saldo ' + dqx.frasa });
+    else if (/\b(saldo|dompet|uang|duit|sisa)\b/.test(t)) saran.push({ label: 'Saldo semua dompet', teks: 'saldo' });
+    if (/\b(masuk|pemasukan|pendapatan|penghasilan|gaji|gajian)\b/.test(t)) saran.push({ label: 'Uang masuk bulan ini', teks: 'uang masuk bulan ini' });
+    const katx = cariSemua(t, idx.kat).filter((k) => !kataUmum(k.frasa)).sort((a, b) => b.len - a.len)[0];
+    if (katx) saran.push({ label: 'Rincian ' + katx.frasa + ' bulan ini', teks: 'rincian ' + katx.frasa + ' bulan ini' });
     saran.push({ label: 'Catat jajan — contoh: es teh 5rb', teks: 'es teh 5rb', contoh: true });
     saran.push({ label: 'Pengeluaran bulan ini', teks: 'pengeluaran bulan ini' });
     saran.push({ label: 'Bantuan', teks: 'bantuan' });

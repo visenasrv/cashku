@@ -176,6 +176,16 @@ Claude akan memandu tahap ini satu per satu di percakapan.
 
 ## Memperbarui aplikasi
 
+> **Pembaruan 1.0.23 (hanya tampilan)**: cukup push ZIP. `Kode.gs` sama dengan 1.0.22, tidak ada APK baru.
+> - **Chat lebih paham kalimat pendek tanpa kata tanya.**
+>   - Nama dompet saja → saldonya: *Tabungan*, *Uang tunai*, *gopay*, *tabunganku*, *dompet*, *sisa*.
+>   - *Uang masuk bulan ini*, *uang keluar minggu ini*, *penghasilan*, *belanja bulan ini* → pemasukan / pengeluaran.
+>   - Bisa per dompet: *uang masuk rekening bulan ini*, *pengeluaran gopay bulan ini*.
+>   - Periode saja (*bulan ini*, *minggu lalu*, *oktober*) → ringkasan; *riwayat tabungan* → saldo + gerakan terakhir.
+> - **Salah ketik & singkatan lebih banyak dipahami:** *Gaji nasuk* → Gaji, *msk*, *klr*, *sldo*, *gajih*, *duit msk bln ini*.
+> - **Kalimat belum lengkap dibantu:** *bayar* → ditanya bayar apa & berapa; *tarik tunai*, *top up gopay*, *isi gopay* → ditanya nominalnya.
+> - Bila tetap belum paham, saran tombolnya menyesuaikan isi pesan (saldo dompet yang disebut, uang masuk, rincian kategori).
+>
 > **Pembaruan 1.0.22 (semua isi 1.0.19–1.0.21 + perbaikan di bawah)**: ganti `Kode.gs` → **Simpan** → **Kelola deployment → Edit → Versi baru → Terapkan**, lalu push ZIP. Tidak ada APK baru.
 > - **Ikon Tabungan bukan babi lagi**, diganti kantong uang 💰. Data dompet lama di Google Sheet ikut diganti otomatis saat pertama login setelah update. Saldo gabungan saat fitur dompet nonaktif memakai ikon 👛 *Uang*.
 > - **Tombol bawaan HP (kembali · beranda · menu) tidak tercampur tampilan lagi.**

@@ -851,9 +851,18 @@
           { label: 'Unduh PDF bulan ini', aksi: 'kirim', nilai: { teks: 'unduh laporan bulan ini' }, ikon: 'download' }] } });
       case 'butuh_nominal': {
         const ket = it.keterangan;
-        await Chat.tambah({ kind: 'pilihan', data: { teks: 'Berapa harga ' + ket.toLowerCase() + 'nya?', sub: 'Ketik nominalnya aja, contoh: **25rb**' } });
+        await Chat.tambah({ kind: 'pilihan', data: { teks: it.jenis === 'PINDAH' || it.jenis === 'MASUK' ? 'Berapa nominal ' + ket.toLowerCase() + '?' : 'Berapa harga ' + ket.toLowerCase() + 'nya?', sub: 'Ketik nominalnya aja, contoh: **25rb**' } });
         Chat.pending = { type: 'harga', jawab: (n) => Chat.proses(it.teks + ' ' + n) };
         return;
+      }
+      case 'kurang_lengkap': {
+        // Hanya kata kerja: "bayar", "beli", "transfer"
+        const k = it.kata;
+        const CONTOH = { beli: 'beli roti 15rb', bayar: 'bayar listrik 200rb', isi: 'isi bensin 30rb', belanja: 'belanja sayur 50rb', transfer: 'transfer ke ibu 500rb', tf: 'tf ke ibu 500rb',
+          kirim: 'kirim uang ke ibu 500rb', setor: 'setor ke tabungan 200rb', catat: 'beli roti 15rb', pesan: 'pesan makanan 45rb', order: 'order ojek 20rb', terima: 'terima uang 100rb', dapat: 'dapat bonus 500rb' };
+        const ct = CONTOH[k] || 'beli roti 15rb';
+        return Chat.tambah({ kind: 'pilihan', data: { teks: 'Mau catat **' + k + '** apa, dan berapa?', sub: 'Contoh: **' + ct + '**', chips: [
+          { label: 'Contoh: ' + ct, aksi: 'isi', nilai: { teks: ct }, tetap: true }, { label: 'Pengeluaran bulan ini', aksi: 'kirim', nilai: { teks: 'pengeluaran bulan ini' } }] } });
       }
       case 'tidak_dikenal':
         // Log pemahaman: isi catatan (nomor, rekening, sandi) tidak ikut tersimpan
@@ -1793,7 +1802,17 @@
       return Chat.tambah({ kind: 'pilihan', data: { teks: 'Kamu hanya bisa melihat data milikmu sendiri.', chips: [{ label: 'Data saya ' + per.label.toLowerCase(), aksi: 'kirim', nilai: { teks: 'pengeluaran saya ' + per.label.toLowerCase() } }] } });
     }
     const f = { mulai: per.mulai, sampai: per.sampai, orang };
-    const namaOrang = orang ? (orang === S.saya.id ? ' (saya)' : ' · ' + S.orang(orang).nama) : '';
+    let namaOrang = orang ? (orang === S.saya.id ? ' (saya)' : ' · ' + S.orang(orang).nama) : '';
+    // 1.0.23: "Bank" padahal ada 2 rekening → ditanyakan dulu
+    if (it.dompetAmbigu && it.dompetAmbigu.length) {
+      const AWAL = { saldo: 'saldo ', masuk: 'uang masuk ', keluar: 'pengeluaran ', daftar: 'riwayat ', ringkasan: 'ringkasan ' };
+      const ekor = it.periode && it.periode.ok && it.metric !== 'saldo' ? ' ' + it.periode.label.replace(/\s*\(.*\)$/, '').toLowerCase() : '';
+      return Chat.tambah({ kind: 'pilihan', data: { teks: 'Dompet yang mana?', chips: it.dompetAmbigu.map((id) => ({ label: S.namaDompet(id), aksi: 'kirim', nilai: { teks: (AWAL[it.metric] || 'saldo ') + S.namaDompet(id).toLowerCase() + ekor } })) } });
+    }
+    // 1.0.23: uang masuk/keluar, riwayat & ringkasan per dompet ("uang masuk rekening bulan ini", "tabungan bulan ini")
+    if (it.dompet && ['masuk', 'keluar', 'daftar', 'ringkasan'].indexOf(it.metric) > -1 && S.dompet(it.dompet) && (S.fiturDompet() || S.dompet(it.dompet).tipe === 'TABUNGAN')) {
+      f.dompet = it.dompet; namaOrang += ' · ' + S.namaDompet(it.dompet);
+    }
     let kor = catatanKoreksi(it);
     if ((it.metric === 'rincian' || it.metric === 'kemana' || it.metric === 'sering') && g.Rincian) return g.Rincian.jawab(it, kor);
 
@@ -1877,7 +1896,7 @@
         catatan: (per2.length ? '' : 'Belum ada transaksi. ') + kor } });
     }
     if (it.metric === 'daftar') {
-      const list = r.list.concat(S.txTerlihat({ mulai: per.mulai, sampai: per.sampai, orang, jenis: 'PINDAH' }).filter((t) => r.list.indexOf(t) < 0))
+      const list = r.list.concat(S.txTerlihat({ mulai: per.mulai, sampai: per.sampai, orang, dompet: f.dompet, jenis: 'PINDAH' }).filter((t) => r.list.indexOf(t) < 0))
         .sort((a, b) => String(b.waktu_catat).localeCompare(String(a.waktu_catat)));
       return Chat.tambah({ kind: 'ringkasan', data: { judul: '🗓️ ' + per.label + namaOrang, total: U.rp(r.keluar), kelasTotal: 't-out',
         caption: 'Pengeluaran ' + U.rp(r.keluar) + ' · Pemasukan ' + U.rp(r.masuk),
