@@ -293,6 +293,20 @@ textarea.input { height: auto; min-height: 96px; padding: 12px 14px; resize: ver
 .msg.me .bub { background: var(--me); border-bottom-right-radius: 4px; }
 .msg.bot .bub { background: var(--bot); border: 1px solid var(--bot-line); border-bottom-left-radius: 4px; min-width: 120px; }
 .msg.bot .bub.wide { width: 85%; }
+/* 1.0.24: pesan baru muncul halus (bukan tiba-tiba), tombol pilihan menyusul satu per satu */
+.msg.baru .bub { animation: bubMasuk .3s cubic-bezier(.2, .85, .3, 1.12) both; }
+.msg.me.baru .bub { transform-origin: 100% 100%; }
+.msg.bot.baru .bub { transform-origin: 0 100%; animation-duration: .36s; }
+@keyframes bubMasuk { from { opacity: 0; transform: translateY(10px) scale(.93); } to { opacity: 1; transform: none; } }
+.msg.bot.baru .bub .chips > * { animation: chipMasuk .28s ease-out both; animation-delay: .16s; }
+.msg.bot.baru .bub .chips > :nth-child(2) { animation-delay: .21s; } .msg.bot.baru .bub .chips > :nth-child(3) { animation-delay: .26s; }
+.msg.bot.baru .bub .chips > :nth-child(4) { animation-delay: .31s; } .msg.bot.baru .bub .chips > :nth-child(5) { animation-delay: .36s; }
+.msg.bot.baru .bub .chips > :nth-child(n+6) { animation-delay: .4s; }
+@keyframes chipMasuk { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.mengetik { display: table; margin: 4px 0; padding: 12px 14px; border-radius: 16px; border-bottom-left-radius: 4px; background: var(--bot); border: 1px solid var(--bot-line); box-shadow: 0 1px .5px rgba(11, 20, 26, .13); transform-origin: 0 100%; animation: bubMasuk .22s ease-out both; }
+.mengetik span { display: inline-block; width: 7px; height: 7px; margin: 0 2px; border-radius: 50%; background: var(--muted); animation: titikKetik 1s infinite ease-in-out; }
+.mengetik span:nth-child(2) { animation-delay: .15s; } .mengetik span:nth-child(3) { animation-delay: .3s; }
+@keyframes titikKetik { 0%, 60%, 100% { transform: translateY(0); opacity: .45; } 30% { transform: translateY(-4px); opacity: 1; } }
 .bub .meta { display: flex; justify-content: flex-end; align-items: center; gap: 4px; font-size: 11px; color: var(--muted); margin-top: 2px; line-height: 14px; }
 .msg.me .bub .meta .ic { color: #53BDEB; width: 16px; height: 16px; }
 .bub p { margin: 0 0 6px; } .bub p:last-child { margin-bottom: 0; }

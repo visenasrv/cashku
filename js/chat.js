@@ -138,7 +138,11 @@
   };
 
   Chat.autoTinggi = () => { const t = Chat.input; t.style.height = 'auto'; t.style.height = Math.min(120, t.scrollHeight) + 'px'; };
-  Chat.keBawah = () => { if (Chat.scroll) Chat.scroll.scrollTop = Chat.scroll.scrollHeight; };
+  Chat.keBawah = (halus) => {
+    if (!Chat.scroll) return;
+    const gerak = halus && !(g.matchMedia && g.matchMedia('(prefers-reduced-motion: reduce)').matches);
+    if (gerak && Chat.scroll.scrollTo) Chat.scroll.scrollTo({ top: Chat.scroll.scrollHeight, behavior: 'smooth' }); else Chat.scroll.scrollTop = Chat.scroll.scrollHeight;
+  };
   Chat.header = () => {
     if (!Chat.el || !S.saya) return;
     Chat.el.querySelector('[data-sub]').textContent = 'Asisten keuangan ' + S.namaKeluarga();
@@ -180,8 +184,20 @@
   // =============================================================
   // Pesan: simpan, render
   // =============================================================
+  /** 1.0.24: tiga titik "sedang mengetik" sesaat sebelum CashKu membalas */
+  Chat.JEDA_KETIK = typeof g.CASHKU_JEDA_KETIK === 'number' ? g.CASHKU_JEDA_KETIK : 450;   // bisa diatur lewat config.js
+  Chat.mengetik = async function (ms) {
+    if (!Chat.scroll) return;
+    let el = Chat.scroll.querySelector('[data-mengetik]');
+    if (!el) { Chat.scroll.insertAdjacentHTML('beforeend', '<div class="mengetik" data-mengetik aria-label="CashKu sedang mengetik"><span></span><span></span><span></span></div>'); el = Chat.scroll.lastElementChild; }
+    Chat.keBawah(true);
+    await new Promise((r) => setTimeout(r, ms));
+    if (el.parentNode) el.remove();
+  };
   Chat.tambah = async function (m) {
     m.id = m.id || 'M' + Date.now().toString(36) + U.rand(4);
+    const terakhir = S.chat[S.chat.length - 1];
+    if (m.from !== 'me' && !m.t && terakhir && terakhir.from === 'me' && Date.now() - terakhir.t < 4000 && Chat.JEDA_KETIK > 0 && Chat.scroll && Chat.el && !Chat.el.hidden && !document.hidden) await Chat.mengetik(Chat.JEDA_KETIK);
     m.t = m.t || Date.now();
     m.u = S.saya.id;
     m.from = m.from || 'bot';
@@ -191,8 +207,11 @@
     if (Chat.scroll && !Chat.el.hidden) {
       const prev = S.chat[S.chat.length - 2];
       if (!prev || U.tglStr(new Date(prev.t)) !== U.tglStr(new Date(m.t))) Chat.scroll.insertAdjacentHTML('beforeend', Chat.dayChip(m.t));
-      Chat.scroll.insertAdjacentHTML('beforeend', Chat.htmlPesan(m, prev));
-      Chat.keBawah();
+      const ketik = Chat.scroll.querySelector('[data-mengetik]');
+      if (ketik) ketik.insertAdjacentHTML('beforebegin', Chat.htmlPesan(m, prev)); else Chat.scroll.insertAdjacentHTML('beforeend', Chat.htmlPesan(m, prev));
+      const el = Chat.scroll.querySelector('[data-id="' + m.id + '"]');
+      if (el) { el.classList.add('baru'); setTimeout(() => el.classList.remove('baru'), 1000); }   // muncul halus, sekali saja (tidak terulang saat halaman dibuka lagi)
+      Chat.keBawah(true);
     } else if (Chat.el) Chat.el.dataset.kotor = '1';
     return m;
   };

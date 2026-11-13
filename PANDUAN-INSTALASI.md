@@ -176,6 +176,11 @@ Claude akan memandu tahap ini satu per satu di percakapan.
 
 ## Memperbarui aplikasi
 
+> **Pembaruan 1.0.24 (hanya tampilan)**: cukup push ZIP. `Kode.gs` sama dengan 1.0.22, tidak ada APK baru.
+> - **Chat lebih hidup.** Pesan muncul halus (memudar dan sedikit naik), tombol pilihan menyusul satu per satu, dan daftar chat bergulir lembut ke bawah.
+> - **Ada titik "sedang mengetik"** sesaat (±0,5 detik) sebelum CashKu membalas, seperti WhatsApp.
+> - Riwayat lama tidak ikut beranimasi saat chat dibuka. Bila HP memakai pengaturan "kurangi animasi", animasinya otomatis dimatikan.
+>
 > **Pembaruan 1.0.23 (hanya tampilan)**: cukup push ZIP. `Kode.gs` sama dengan 1.0.22, tidak ada APK baru.
 > - **Chat lebih paham kalimat pendek tanpa kata tanya.**
 >   - Nama dompet saja → saldonya: *Tabungan*, *Uang tunai*, *gopay*, *tabunganku*, *dompet*, *sisa*.
